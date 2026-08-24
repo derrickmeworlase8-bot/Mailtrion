@@ -1,5 +1,5 @@
 """
-PhishGuard AI — Outlook / Microsoft 365 provider
+Snarelytics — Outlook / Microsoft 365 provider
 
 Implements EmailProvider against the Microsoft Graph API, using MSAL for
 the OAuth token lifecycle. Written against the exact same interface as
@@ -28,11 +28,11 @@ from paths import DEFAULT_OUTLOOK_SECRETS_FILE
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 SCOPES = ["Mail.ReadWrite", "User.Read"]  # offline_access is implicit for MSAL confidential clients
-QUARANTINE_FOLDER_NAME = "PhishGuard Quarantine"
+QUARANTINE_FOLDER_NAME = "Snarelytics Quarantine"
 
 OUTLOOK_SECRETS_FILE = os.environ.get("OUTLOOK_SECRETS_FILE", DEFAULT_OUTLOOK_SECRETS_FILE)
 
-# Maps PhishGuard's logical folder names to Outlook's well-known folder IDs.
+# Maps Snarelytics's logical folder names to Outlook's well-known folder IDs.
 _FOLDER_CONFIG = {
     "inbox": {"well_known": "inbox", "max_results": 25},
     "spam":  {"well_known": "junkemail", "max_results": 15},

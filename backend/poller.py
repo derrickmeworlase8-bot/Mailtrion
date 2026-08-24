@@ -1,5 +1,5 @@
 """
-PhishGuard AI — shared polling loop.
+Snarelytics — shared polling loop.
 
 This is the one piece of code that actually walks "connected accounts,
 check for new mail, scan it, quarantine if phishing" — written once

@@ -1,4 +1,4 @@
-# Deploying PhishGuard AI to Render
+# Deploying Snarelytics to Render
 
 This replaces "build a standalone .exe and hand people the folder" with:
 push to GitHub → connect the repo on Render → get one link anyone can open.

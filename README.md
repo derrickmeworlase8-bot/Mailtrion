@@ -1,4 +1,4 @@
-# PhishGuard AI
+# Snarelytics
 
 AI-based phishing email detection and risk assessment system, with automated
 Gmail ingestion (Phase 1).
@@ -31,7 +31,7 @@ phishguard-ai/
 ├── uploads/                ← .eml file uploads land here
 ├── reports/                ← generated PDF/Excel reports land here
 ├── frontend/
-│   └── index.html          ← the PhishGuard UI (served automatically at http://localhost:5000)
+│   └── index.html          ← the Snarelytics UI (served automatically at http://localhost:5000)
 └── backend/
     ├── app.py              ← main Flask application
     ├── paths.py             ← shared path resolution (makes the app portable — see below)
@@ -114,7 +114,7 @@ whatever frontend you're pointing at this backend.
 
 ## Automated email scanning (optional, needs a one-time setup per provider)
 
-PhishGuard can automatically scan a connected inbox in the background —
+Snarelytics can automatically scan a connected inbox in the background —
 no manual copy-paste needed. Three providers are supported:
 
 - **Gmail** — see `SETUP_GMAIL.md` (Google Cloud OAuth)
@@ -129,22 +129,22 @@ provider's OAuth routes, while IMAP is always available since it needs
 no server-side app registration. Connect accounts from the **Email
 integrations** page in the sidebar once set up.
 
-When a quarantined email is deleted from the PhishGuard UI, it is also
+When a quarantined email is deleted from the Snarelytics UI, it is also
 deleted from the real mailbox it came from (moved to that provider's own
 Trash/Deleted Items — reversible for a window, same as clicking delete
-in any normal email client), not just removed from PhishGuard's own
+in any normal email client), not just removed from Snarelytics's own
 records.
 
 ## Building a standalone desktop app (no Python required to run it)
 
 `start.bat` requires Python installed — great for development, not ideal
 for handing the app to someone else or presenting it as a finished
-product. Two build scripts turn PhishGuard into a real, portable desktop
+product. Two build scripts turn Snarelytics into a real, portable desktop
 app that runs with **no Python installation needed on the machine it
 runs on**:
 
 - **`build_exe.bat`** — packages the Python backend into a standalone
-  `PhishGuard.exe` using PyInstaller. Produces `backend\dist\PhishGuard\`,
+  `Snarelytics.exe` using PyInstaller. Produces `backend\dist\Snarelytics\`,
   a complete folder that runs on its own.
 - **`build_standalone_app.bat`** — runs the above, then wraps it in a
   real Electron desktop app with a proper Windows installer (Start Menu

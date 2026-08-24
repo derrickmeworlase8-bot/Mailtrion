@@ -1,4 +1,4 @@
-# PhishGuard AI — Yahoo / Other IMAP Account Setup
+# Snarelytics — Yahoo / Other IMAP Account Setup
 
 Yahoo (and most other consumer IMAP providers) don't offer a practical
 OAuth sign-in flow for independent third-party apps the way Gmail and
@@ -17,14 +17,14 @@ the simplest of the three integrations to set up.
    on first (you'll need a phone number or authenticator app).
 3. Find **"Generate app password"** (sometimes listed as **"Manage app
    passwords"**) on the same Account Security page.
-4. Give it a name (e.g. "PhishGuard AI") and generate it.
+4. Give it a name (e.g. "Snarelytics") and generate it.
 5. **Copy the generated password immediately** — Yahoo shows it once.
    It'll look like a random string of characters, not your normal
    password.
 
-## 2. Connect it in PhishGuard
+## 2. Connect it in Snarelytics
 
-1. Log in to PhishGuard, go to **Email integrations** in the sidebar.
+1. Log in to Snarelytics, go to **Email integrations** in the sidebar.
 2. Under **Yahoo / Other (IMAP)**, click **+ Connect Yahoo / IMAP account**.
 3. Provider dropdown: select **Yahoo** — this pre-fills the correct
    server settings (`imap.mail.yahoo.com`, port `993`, spam folder
@@ -32,14 +32,14 @@ the simplest of the three integrations to set up.
 4. Enter your Yahoo email address.
 5. Paste the **app password** you generated in step 1 — not your normal
    Yahoo password.
-6. Click **Test & Connect**. PhishGuard tries logging in immediately
+6. Click **Test & Connect**. Snarelytics tries logging in immediately
    before saving anything — if something's wrong (wrong password, 2FA
    not enabled, etc.), you'll see the actual error right away rather
    than a silent failure later.
 
 Once connected, polling works exactly the same as Gmail and Outlook —
 Inbox and Spam ("Bulk Mail") checked every ~90 seconds, phishing moved
-to a "PhishGuard Quarantine" folder automatically.
+to a "Snarelytics Quarantine" folder automatically.
 
 ## Connecting other IMAP providers (iCloud, Zoho, AOL, or any other)
 
@@ -61,7 +61,7 @@ The same form works for any IMAP-accessible mailbox:
 
 Unlike Gmail/Outlook's OAuth tokens — which are scoped, revocable, and
 never include your actual password — an IMAP app password is stored
-directly in PhishGuard's local database so it can reconnect on every
+directly in Snarelytics's local database so it can reconnect on every
 polling cycle. This is:
 
 - **Safer than your real password** — if it's ever compromised, you can

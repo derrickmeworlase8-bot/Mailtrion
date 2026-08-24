@@ -24,3 +24,16 @@ services:
       #   value: https://YOUR-RENDER-URL.onrender.com/auth/gmail/callback
       # - key: OUTLOOK_REDIRECT_URI
       #   value: https://YOUR-RENDER-URL.onrender.com/auth/outlook/callback
+      # Optional — needed for new users to receive their OTP verification
+      # email on registration. Works with a Gmail account + App Password,
+      # an Outlook account, or any SMTP-based transactional email provider.
+      # Leave unset and registration still works, but the code only appears
+      # in the server logs instead of an actual email.
+      # - key: SMTP_HOST
+      #   value: smtp.gmail.com
+      # - key: SMTP_PORT
+      #   value: 587
+      # - key: SMTP_USER
+      #   value: your-address@gmail.com
+      # - key: SMTP_PASSWORD
+      #   sync: false

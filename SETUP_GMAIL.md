@@ -1,8 +1,8 @@
-# PhishGuard AI — Gmail Integration Setup
+# Snarelytics — Gmail Integration Setup
 
-This adds automated ingestion: PhishGuard polls a connected Gmail inbox,
+This adds automated ingestion: Snarelytics polls a connected Gmail inbox,
 scans new mail through the existing detection pipeline, and moves anything
-flagged "Phishing" into a `PhishGuard/Quarantine` Gmail label automatically.
+flagged "Phishing" into a `Snarelytics/Quarantine` Gmail label automatically.
 No copy-paste required.
 
 ## 1. Google Cloud Console setup
@@ -27,26 +27,26 @@ No copy-paste required.
 pip install -r requirements.txt
 ```
 
-## 3. Run PhishGuard as usual
+## 3. Run Snarelytics as usual
 
 ```bash
 python app.py
 ```
 
 You should see in the logs: `Gmail integration enabled (polling every 90s)`.
-If `client_secret.json` is missing, PhishGuard still runs fine — it just logs
+If `client_secret.json` is missing, Snarelytics still runs fine — it just logs
 a warning and skips the Gmail routes, so this won't break your existing setup.
 
 ## 4. Connect a Gmail account
 
-1. Log in to PhishGuard normally (`/auth/login`) and grab your bearer token.
+1. Log in to Snarelytics normally (`/auth/login`) and grab your bearer token.
 2. Visit in a browser: `http://localhost:5000/auth/gmail/connect?token=YOUR_TOKEN`
 3. Complete the Google consent screen (you'll see a warning that the app is
    "unverified" — this is expected for a project not submitted for Google's
-   verification review; click Advanced → Go to PhishGuard to proceed).
+   verification review; click Advanced → Go to Snarelytics to proceed).
 4. On success you'll see a JSON confirmation with your connected Gmail address.
 
-From this point, PhishGuard polls that inbox every 90 seconds (configurable
+From this point, Snarelytics polls that inbox every 90 seconds (configurable
 via the `GMAIL_POLL_INTERVAL` env var) and scans new mail automatically.
 
 ## 5. Check connection status / disconnect
@@ -79,7 +79,7 @@ it shows you evaluated the tradeoff deliberately rather than not knowing push ex
   project/demo, **not** production-ready. Flag this as a known limitation or
   add field-level encryption (e.g. `cryptography.fernet`) before deploying
   beyond your own test account.
-- The `TOKENS` dict (PhishGuard's own session store) is in-memory and clears
+- The `TOKENS` dict (Snarelytics's own session store) is in-memory and clears
   on restart — same limitation the original app already had, unrelated to Gmail.
 - Because the app is an "unverified" Google OAuth app, only Google accounts
   you've added as test users can connect. Submitting for verification is a

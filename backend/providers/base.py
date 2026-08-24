@@ -1,5 +1,5 @@
 """
-PhishGuard AI — Email Provider Interface
+Snarelytics — Email Provider Interface
 
 Every mail provider (Gmail, Outlook, Yahoo/IMAP, ...) implements this same
 interface. The polling loop and the detection engine (app.perform_scan)
@@ -9,7 +9,7 @@ by writing one new class here, without touching the poller, the scan
 pipeline, or any other provider's code.
 
 Folder names are logical, not provider-specific: "inbox" and "spam" are
-the two folders PhishGuard polls. Each provider maps these to whatever
+the two folders Snarelytics polls. Each provider maps these to whatever
 its own system actually calls them (e.g. Gmail's "SPAM" label vs. an
 IMAP "Junk" folder — that mapping detail lives inside each provider).
 """
@@ -80,8 +80,8 @@ class EmailProvider(ABC):
         """
         Permanently remove an already-quarantined message from the
         mailbox — called when the user deletes a quarantined item from
-        PhishGuard's UI, so the message actually leaves the account
-        rather than just disappearing from PhishGuard's own records.
+        Snarelytics's UI, so the message actually leaves the account
+        rather than just disappearing from Snarelytics's own records.
 
         Implementations move the message to the provider's own Trash/
         Deleted Items rather than an unrecoverable instant purge — this

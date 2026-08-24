@@ -1,5 +1,5 @@
 """
-PhishGuard AI - Complete Backend
+Snarelytics - Complete Backend
 AI-Based Phishing Email Detection and Risk Assessment System
 for Organizational Email Security
 
@@ -36,6 +36,7 @@ import pandas as pd
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
+import mailer
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
@@ -106,6 +107,26 @@ LOGIN_MAX_ATTEMPTS = 5
 LOGIN_WINDOW_SECONDS = 60
 LOGIN_LOCKOUT_SECONDS = 60 * 60  # 1 hour
 
+# OTP email-verification settings.
+OTP_EXPIRY_MINUTES = 10
+OTP_MAX_VERIFY_ATTEMPTS = 5   # wrong-code guesses allowed before requiring a resend
+OTP_RESEND_COOLDOWN_SECONDS = 60
+OTP_RESEND_LAST_SENT = {}     # email -> datetime of last OTP send (cooldown)
+
+
+def _generate_and_send_otp(conn, user_row):
+    """Generates a fresh OTP, stores it against the user, and emails it.
+    Returns True if the email actually sent, False if it only logged
+    (SMTP not configured) — the caller decides what to tell the frontend."""
+    code = f"{secrets.randbelow(1000000):06d}"
+    expires = (datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)).isoformat()
+    conn.execute(
+        "UPDATE users SET otp_code=?, otp_expires=?, otp_attempts=0 WHERE id=?",
+        (code, expires, user_row["id"])
+    )
+    conn.commit()
+    return mailer.send_otp_email(user_row["email"], user_row["username"], code)
+
 CORS(app, supports_credentials=True,
      resources={r"/*": {"origins": "*"}})
 
@@ -131,7 +152,7 @@ def serve_frontend():
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index_path):
         return send_file(index_path)
-    return jsonify({"status": "PhishGuard AI backend running",
+    return jsonify({"status": "Snarelytics backend running",
                     "note": "frontend/index.html not found"}), 200
 
 logging.basicConfig(level=logging.INFO,
@@ -278,6 +299,24 @@ def init_db():
     if "account_id" not in existing_cols:
         c.execute("ALTER TABLE scans ADD COLUMN account_id INTEGER")
         log.info("Migration: added scans.account_id")
+    conn.commit()
+
+    # ── Migration: email verification (OTP) columns on users ──────────────────
+    existing_user_cols = {row[1] for row in c.execute("PRAGMA table_info(users)").fetchall()}
+    if "is_verified" not in existing_user_cols:
+        # Existing accounts (created before this feature existed) are grandfathered
+        # in as already-verified, so nobody who could already log in gets locked out.
+        c.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 1")
+        log.info("Migration: added users.is_verified")
+    if "otp_code" not in existing_user_cols:
+        c.execute("ALTER TABLE users ADD COLUMN otp_code TEXT")
+        log.info("Migration: added users.otp_code")
+    if "otp_expires" not in existing_user_cols:
+        c.execute("ALTER TABLE users ADD COLUMN otp_expires TEXT")
+        log.info("Migration: added users.otp_expires")
+    if "otp_attempts" not in existing_user_cols:
+        c.execute("ALTER TABLE users ADD COLUMN otp_attempts INTEGER DEFAULT 0")
+        log.info("Migration: added users.otp_attempts")
     conn.commit()
 
     # Create default admin if no users
@@ -785,17 +824,111 @@ def register():
 
     conn = get_db()
     try:
-        conn.execute("""INSERT INTO users (username,email,password_hash,role,created_at)
-            VALUES (?,?,?,?,?)""",
+        conn.execute("""INSERT INTO users (username,email,password_hash,role,created_at,is_verified)
+            VALUES (?,?,?,?,?,0)""",
             (username, em, generate_password_hash(pw), role,
              datetime.utcnow().isoformat()))
         conn.commit()
         audit(None, username, "REGISTER", f"New user registered: {em}")
-        return jsonify({"message":"Account created successfully"}), 201
+
+        user = conn.execute("SELECT * FROM users WHERE email=?", (em,)).fetchone()
+        emailed = _generate_and_send_otp(conn, user)
+
+        if emailed:
+            return jsonify({
+                "message": "Account created. Check your email for a 6-digit verification code.",
+                "email": em
+            }), 201
+        else:
+            # SMTP isn't configured on this deployment — the code went to the
+            # server log instead. Say so plainly rather than pretending an
+            # email was sent when it wasn't.
+            return jsonify({
+                "message": "Account created, but the verification email could not be sent "
+                           "(email sending isn't configured on this server yet). "
+                           "Contact the administrator to verify your account.",
+                "email": em,
+                "email_sent": False
+            }), 201
     except sqlite3.IntegrityError:
         return jsonify({"error":"Username or email already exists"}), 409
     finally:
         conn.close()
+
+
+@app.route("/auth/verify-otp", methods=["POST"])
+def verify_otp():
+    d = request.get_json()
+    em   = (d.get("email","")).strip().lower()
+    code = (d.get("code","")).strip()
+
+    if not em or not code:
+        return jsonify({"error": "Email and code are required"}), 400
+
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE email=?", (em,)).fetchone()
+
+    if not user:
+        conn.close()
+        return jsonify({"error": "Invalid email or code"}), 400
+
+    if user["is_verified"]:
+        conn.close()
+        return jsonify({"message": "Account already verified. You can log in."}), 200
+
+    if not user["otp_code"] or not user["otp_expires"]:
+        conn.close()
+        return jsonify({"error": "No verification code pending. Request a new one."}), 400
+
+    if datetime.utcnow() > datetime.fromisoformat(user["otp_expires"]):
+        conn.close()
+        return jsonify({"error": "Code expired. Request a new one."}), 400
+
+    if user["otp_attempts"] >= OTP_MAX_VERIFY_ATTEMPTS:
+        conn.close()
+        return jsonify({"error": "Too many incorrect attempts. Request a new code."}), 429
+
+    if code != user["otp_code"]:
+        conn.execute("UPDATE users SET otp_attempts = otp_attempts + 1 WHERE id=?", (user["id"],))
+        conn.commit()
+        conn.close()
+        return jsonify({"error": "Incorrect code"}), 400
+
+    conn.execute(
+        "UPDATE users SET is_verified=1, otp_code=NULL, otp_expires=NULL, otp_attempts=0 WHERE id=?",
+        (user["id"],)
+    )
+    conn.commit()
+    audit(user["id"], user["username"], "EMAIL_VERIFIED", f"{em} verified their email")
+    conn.close()
+    return jsonify({"message": "Email verified. You can now log in."}), 200
+
+
+@app.route("/auth/resend-otp", methods=["POST"])
+def resend_otp():
+    d = request.get_json()
+    em = (d.get("email","")).strip().lower()
+    if not em:
+        return jsonify({"error": "Email is required"}), 400
+
+    last_sent = OTP_RESEND_LAST_SENT.get(em)
+    if last_sent and (datetime.utcnow() - last_sent).total_seconds() < OTP_RESEND_COOLDOWN_SECONDS:
+        wait = int(OTP_RESEND_COOLDOWN_SECONDS - (datetime.utcnow() - last_sent).total_seconds())
+        return jsonify({"error": f"Please wait {wait}s before requesting another code."}), 429
+
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE email=?", (em,)).fetchone()
+
+    # Same response whether or not the account exists, so this endpoint can't
+    # be used to check which emails are registered.
+    if not user or user["is_verified"]:
+        conn.close()
+        return jsonify({"message": "If that account needs verification, a new code was sent."}), 200
+
+    OTP_RESEND_LAST_SENT[em] = datetime.utcnow()
+    _generate_and_send_otp(conn, user)
+    conn.close()
+    return jsonify({"message": "If that account needs verification, a new code was sent."}), 200
 
 
 @app.route("/auth/login", methods=["POST"])
@@ -839,6 +972,13 @@ def login():
             return jsonify({"error": "Too many failed login attempts. Try again in about 60 minutes."}), 429
         audit(None, em, "LOGIN_FAIL", "Invalid credentials")
         return jsonify({"error":"Invalid email or password"}), 401
+
+    if not user["is_verified"]:
+        return jsonify({
+            "error": "Please verify your email before logging in.",
+            "needs_verification": True,
+            "email": em
+        }), 403
 
     LOGIN_ATTEMPTS.pop(em, None)
     LOGIN_LOCKOUTS.pop(em, None)
@@ -902,7 +1042,7 @@ def perform_scan(body, sender, subject, auth, user_id, source="manual", gmail_me
     (if any) this scan came from — this is what lets the quarantine
     "delete" action reconstruct the right provider instance later and
     actually remove the message from the real mailbox, not just from
-    PhishGuard's own records.
+    Snarelytics's own records.
     """
     # Idempotency: don't re-scan the same Gmail message twice (poller may overlap)
     if gmail_message_id:
@@ -1132,7 +1272,7 @@ def delete_quarantine(scan_id):
 
     # If this scan came from a connected mail account (not a manual paste-in
     # scan), also remove the actual message from that mailbox — otherwise
-    # deleting here would only clear PhishGuard's own record while the real
+    # deleting here would only clear Snarelytics's own record while the real
     # email keeps sitting in the account's Quarantine folder/label forever.
     if row["provider"] and row["account_id"] and row["gmail_message_id"]:
         try:
@@ -1164,7 +1304,7 @@ def delete_quarantine(scan_id):
     conn.commit(); conn.close()
     audit(current_user()["id"], current_user()["username"],
           "QUARANTINE_DELETE", f"scan_id={scan_id} mailbox_result={mailbox_result}")
-    return jsonify({"message": "Email deleted from PhishGuard", "mailbox_result": mailbox_result})
+    return jsonify({"message": "Email deleted from Snarelytics", "mailbox_result": mailbox_result})
 
 
 @app.route("/quarantine/<scan_id>", methods=["GET"])
@@ -1253,7 +1393,7 @@ def report_pdf():
     styles = getSampleStyleSheet()
     story  = []
 
-    story.append(Paragraph("PhishGuard AI — Security Report", styles["Title"]))
+    story.append(Paragraph("Snarelytics — Security Report", styles["Title"]))
     story.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", styles["Normal"]))
     story.append(Spacer(1,12))
 
@@ -1303,7 +1443,7 @@ def report_pdf():
     doc.build(story)
     audit(current_user()["id"], current_user()["username"], "REPORT_PDF")
     return send_file(path, as_attachment=True,
-                     download_name="PhishGuard_Report.pdf",
+                     download_name="Snarelytics_Report.pdf",
                      mimetype="application/pdf")
 
 
@@ -1351,7 +1491,7 @@ def report_excel():
     wb.save(path)
     audit(current_user()["id"], current_user()["username"], "REPORT_EXCEL")
     return send_file(path, as_attachment=True,
-                     download_name="PhishGuard_Report.xlsx",
+                     download_name="Snarelytics_Report.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1475,7 +1615,7 @@ if __name__ == "__main__":
     HOST = "0.0.0.0" if IS_HOSTED else "127.0.0.1"
     PORT = int(os.environ.get("PORT", 5000))
 
-    log.info(f"PhishGuard AI started → http://{HOST}:{PORT}")
+    log.info(f"Snarelytics started → http://{HOST}:{PORT}")
 
     # ── Server hardening ────────────────────────────────────────────────────
     # The previous default here — app.run(debug=True, host="0.0.0.0") — is a

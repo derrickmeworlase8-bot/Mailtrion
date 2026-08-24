@@ -1,8 +1,8 @@
-# PhishGuard AI — Outlook / Microsoft 365 Integration Setup
+# Snarelytics — Outlook / Microsoft 365 Integration Setup
 
 This adds automated ingestion for Outlook, Microsoft 365, and personal
 Microsoft accounts (outlook.com, hotmail.com, live.com) — the same kind of
-automated polling + quarantine PhishGuard already does for Gmail, just
+automated polling + quarantine Snarelytics already does for Gmail, just
 talking to Microsoft's Graph API instead.
 
 ## 1. Azure Portal setup
@@ -10,7 +10,7 @@ talking to Microsoft's Graph API instead.
 1. Go to https://portal.azure.com/ and sign in (a free Microsoft account works).
 2. Search for **"App registrations"** in the top search bar, and open it.
 3. Click **New registration**.
-   - Name: `PhishGuard AI` (or anything — only used for your own reference)
+   - Name: `Snarelytics` (or anything — only used for your own reference)
    - Supported account types: **"Accounts in any organizational directory
      and personal Microsoft accounts"** — this is the option that allows
      both work/school *and* personal Outlook/Hotmail addresses to connect.
@@ -58,29 +58,29 @@ In the same folder as `app.py` (`backend/`), create a file named exactly
 Leave `"tenant": "common"` as-is unless you specifically want to restrict
 this to a single organization's accounts only.
 
-## 4. Run PhishGuard as usual
+## 4. Run Snarelytics as usual
 
 ```bash
 python app.py
 ```
 
 You should see in the logs: `Outlook integration enabled`. If
-`outlook_secret.json` is missing or malformed, PhishGuard still runs fine
+`outlook_secret.json` is missing or malformed, Snarelytics still runs fine
 — it just logs a warning and skips the Outlook routes, exactly like the
 Gmail integration does when unconfigured.
 
 ## 5. Connect an Outlook account
 
-1. Log in to PhishGuard, go to **Email integrations** in the sidebar.
+1. Log in to Snarelytics, go to **Email integrations** in the sidebar.
 2. Click **+ Connect Outlook account** under the Outlook panel.
 3. Sign in with the Microsoft account you want to connect, and approve
    the requested permissions.
-4. You'll be redirected back into PhishGuard with a confirmation.
+4. You'll be redirected back into Snarelytics with a confirmation.
 
-From this point, PhishGuard polls that account's Inbox and Junk Email
+From this point, Snarelytics polls that account's Inbox and Junk Email
 folders every ~90 seconds (same interval as Gmail, shared setting —
 `MAIL_POLL_INTERVAL` env var) and quarantines anything scored phishing
-into a folder named **"PhishGuard Quarantine"**.
+into a folder named **"Snarelytics Quarantine"**.
 
 ## Notes on how this differs from Gmail
 
