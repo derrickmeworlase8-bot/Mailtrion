@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PhishGuard AI — Phishing Detection System</title>
+<style>
+:root{
+  --bg:#0f1117;--bg2:#161b27;--bg3:#1e2433;--card:#1a2035;
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
+  --text:#e8eaf0;--text2:#8b92a8;--text3:#555e75;
+  --accent:#4f8ef7;--accent2:#3a6fd4;
+  --red:#e53e3e;--red-bg:rgba(229,62,62,.12);--red-border:rgba(229,62,62,.3);
+  --orange:#ed8936;--orange-bg:rgba(237,137,54,.12);--orange-border:rgba(237,137,54,.3);
+  --green:#38a169;--green-bg:rgba(56,161,105,.12);--green-border:rgba(56,161,105,.3);
+  --purple:#805ad5;--purple-bg:rgba(128,90,213,.12);
+  --radius:10px;--radius-sm:6px;
+  --font:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+
+/* ── AUTH SCREEN ── */
+#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg)}
+.auth-box{width:400px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px}
+.auth-logo{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.auth-logo-icon{width:40px;height:40px;background:linear-gradient(135deg,#4f8ef7,#805ad5);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.auth-logo-icon svg{width:22px;height:22px}
+.auth-title{font-size:20px;font-weight:600}
+.auth-sub{font-size:12px;color:var(--text3);margin-top:2px}
+.auth-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px}
+.auth-tab{flex:1;text-align:center;padding:8px;cursor:pointer;font-size:13px;color:var(--text2);border-bottom:2px solid transparent;transition:all .15s}
+.auth-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.auth-form{display:none}.auth-form.active{display:block}
+.form-group{margin-bottom:14px}
+.form-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:block}
+.form-input{width:100%;padding:10px 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px;transition:border-color .15s}
+.form-input:focus{outline:none;border-color:var(--accent)}
+.btn-primary{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.btn-primary:hover{background:var(--accent2)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.auth-error{font-size:12px;color:var(--red);background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius-sm);padding:8px 12px;margin-top:10px;display:none}
+.auth-success{font-size:12px;color:var(--green);background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--radius-sm);padding:8px 12px;margin-top:10px;display:none}
+
+/* ── APP SHELL ── */
+#app{display:none}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100}
+.sidebar-logo{padding:18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,#4f8ef7,#805ad5);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-icon svg{width:18px;height:18px}
+.logo-title{font-size:14px;font-weight:600}
+.logo-sub{font-size:10px;color:var(--text3)}
+.nav{padding:12px 10px;flex:1}
+.nav-section{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;padding:8px 8px 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);font-size:13px;transition:all .15s;margin-bottom:2px}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:rgba(79,142,247,.12);color:var(--accent)}
+.nav-item svg{width:16px;height:16px;flex-shrink:0}
+.nav-badge{margin-left:auto;font-size:10px;background:var(--red);color:#fff;padding:1px 6px;border-radius:10px}
+.sidebar-footer{padding:12px 18px;border-top:1px solid var(--border);font-size:11px;color:var(--text3)}
+.user-chip{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.user-avatar{width:26px;height:26px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0}
+.user-name{font-size:12px;color:var(--text2)}
+.user-role{font-size:10px;color:var(--text3)}
+.btn-logout{width:100%;padding:6px;background:transparent;color:var(--text3);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:11px;transition:all .15s}
+.btn-logout:hover{color:var(--red);border-color:var(--red-border)}
+
+.main{margin-left:220px;min-height:100vh}
+.topbar{height:56px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 28px;gap:16px;background:var(--bg);position:sticky;top:0;z-index:50}
+.topbar-title{font-size:15px;font-weight:500;flex:1}
+.status-pill{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500}
+.status-pill.online{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.status-pill.offline{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.btn-sm{font-size:12px;padding:6px 14px;border-radius:var(--radius-sm);background:transparent;color:var(--text2);border:1px solid var(--border2);cursor:pointer;transition:all .15s}
+.btn-sm:hover{border-color:var(--accent);color:var(--accent)}
+.btn-sm.danger:hover{border-color:var(--red-border);color:var(--red)}
+
+.page{display:none;padding:24px 28px}
+.page.active{display:block}
+.two-col{display:grid;grid-template-columns:1fr 360px;gap:20px}
+
+/* ── PANELS ── */
+.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+.panel-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.panel-title{font-size:13px;font-weight:600}
+.panel-sub{font-size:11px;color:var(--text3);margin-top:1px}
+.panel-body{padding:18px}
+
+/* ── FORM ── */
+.field-group{margin-bottom:14px}
+.field-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:block}
+.field-input,.field-textarea{width:100%;padding:10px 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px;transition:border-color .15s}
+.field-input:focus,.field-textarea:focus{outline:none;border-color:var(--accent)}
+.field-textarea{min-height:150px;resize:vertical;line-height:1.6}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn-analyze{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-analyze:hover:not(:disabled){background:var(--accent2)}
+.btn-analyze:disabled{opacity:.4;cursor:not-allowed}
+
+.upload-zone{border:2px dashed var(--border2);border-radius:var(--radius-sm);padding:20px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:14px}
+.upload-zone:hover{border-color:var(--accent);background:rgba(79,142,247,.04)}
+.upload-zone input{display:none}
+.upload-zone-text{font-size:12px;color:var(--text3)}
+.upload-zone-sub{font-size:11px;color:var(--text3);margin-top:4px}
+
+/* ── PROGRESS ── */
+.progress-wrap{margin-top:12px;display:none}
+.progress-label{font-size:11px;color:var(--text2);margin-bottom:6px;display:flex;justify-content:space-between}
+.progress-bar{height:3px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .4s;width:0}
+
+/* ── RESULT ── */
+.result-wrap{margin-top:18px;display:none}
+.verdict-banner{border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.verdict-banner.Phishing{background:var(--red-bg);border:1px solid var(--red-border)}
+.verdict-banner.Suspicious{background:var(--orange-bg);border:1px solid var(--orange-border)}
+.verdict-banner.Safe{background:var(--green-bg);border:1px solid var(--green-border)}
+.gauge-outer{position:relative;width:72px;height:72px;flex-shrink:0}
+.gauge-outer svg{width:72px;height:72px}
+.gauge-label{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.gauge-num{font-size:18px;font-weight:700;line-height:1}
+.gauge-sub{font-size:9px;color:var(--text3)}
+.verdict-info{flex:1}
+.verdict-pill{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.pill-Phishing{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.pill-Suspicious{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-border)}
+.pill-Safe{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.verdict-explain{font-size:12px;color:var(--text2);line-height:1.5;margin-top:4px}
+
+/* ── AUTH BADGES ── */
+.auth-badges{display:flex;gap:8px;margin:10px 0}
+.auth-badge{font-size:10px;padding:3px 8px;border-radius:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.auth-badge.pass{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.auth-badge.fail{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.auth-badge.none{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
+
+/* ── XAI ── */
+.xai-row-item{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.xai-name{font-size:12px;color:var(--text2);width:160px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xai-bar-bg{flex:1;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.xai-bar-fill{height:100%;border-radius:3px;transition:width .7s .1s}
+.bar-neg{background:var(--red)}.bar-pos{background:var(--green)}
+.xai-pct{font-size:11px;color:var(--text3);width:30px;text-align:right;flex-shrink:0}
+
+/* ── FINDINGS ── */
+.findings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.finding-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px}
+.finding-card.full{grid-column:1/-1}
+.finding-head{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.tag-wrap{display:flex;flex-wrap:wrap;gap:5px}
+.tag{font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid transparent}
+.tag-red{background:var(--red-bg);color:var(--red);border-color:var(--red-border)}
+.tag-green{background:var(--green-bg);color:var(--green);border-color:var(--green-border)}
+.tag-gray{background:var(--bg3);color:var(--text3);border-color:var(--border)}
+.tag-blue{background:rgba(79,142,247,.12);color:var(--accent);border-color:rgba(79,142,247,.3)}
+
+/* ── STAT CARDS ── */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.stat-card.blue::before{background:var(--accent)}
+.stat-card.red::before{background:var(--red)}
+.stat-card.green::before{background:var(--green)}
+.stat-card.purple::before{background:var(--purple)}
+.stat-num{font-size:26px;font-weight:600;color:var(--text);line-height:1}
+.stat-label{font-size:12px;color:var(--text2);margin-top:4px}
+
+/* ── TABLE ── */
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;text-align:left;padding:8px 12px;border-bottom:1px solid var(--border)}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--border)}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--bg3)}
+.verdict-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;text-transform:uppercase}
+.chip-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+/* ── QUARANTINE ── */
+.qitem{background:var(--bg2);border:1px solid var(--red-border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px}
+.qitem-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.qitem-sender{font-size:13px;font-weight:500}
+.qitem-subject{font-size:12px;color:var(--text2);margin-bottom:6px}
+.qitem-meta{font-size:11px;color:var(--text3)}
+.qitem-actions{display:flex;gap:8px;margin-top:10px}
+.btn-release{padding:5px 14px;font-size:11px;background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);border-radius:var(--radius-sm);cursor:pointer}
+.btn-delete{padding:5px 14px;font-size:11px;background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);border-radius:var(--radius-sm);cursor:pointer}
+
+/* ── LIVE FEED ── */
+.alert-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.alert-item:last-child{border-bottom:none}
+.alert-icon{width:28px;height:28px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.alert-icon.threat{background:var(--red-bg);color:var(--red)}
+.alert-icon.warning{background:var(--orange-bg);color:var(--orange)}
+.alert-icon.ok{background:var(--green-bg);color:var(--green)}
+.alert-meta{flex:1;min-width:0}
+.alert-sender{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.alert-sub{font-size:11px;color:var(--text3)}
+.alert-score{font-size:13px;font-weight:600;flex-shrink:0}
+
+/* ── FEATURE TABLE ── */
+.feature-table{width:100%;font-size:11px}
+.feature-table td{padding:4px 8px;color:var(--text2)}
+.feature-table td:last-child{text-align:right;color:var(--text);font-weight:500}
+.feature-table tr:hover td{background:var(--bg3)}
+.scroll-y{overflow-y:auto;max-height:240px}
+
+/* ── METRIC GRID ── */
+.metric-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.metric-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 12px;text-align:center}
+.metric-val{font-size:22px;font-weight:600;color:var(--accent)}
+.metric-name{font-size:11px;color:var(--text3);margin-top:3px}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:32px 20px;color:var(--text3)}
+.empty-icon{font-size:32px;margin-bottom:10px}
+.empty-title{font-size:13px;font-weight:500;color:var(--text2);margin-bottom:5px}
+
+/* ── SCORE BAR ── */
+.score-bar-wrap{display:flex;align-items:center;gap:8px}
+.score-bar-bg{flex:1;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.score-bar-fill{height:100%;border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- ══ AUTH SCREEN ══════════════════════════════════════════════════════════ -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">
+        <svg viewBox="0 0 18 18" fill="none"><path d="M9 2L15.5 5.75V12.25L9 16L2.5 12.25V5.75L9 2Z" stroke="white" stroke-width="1.3"/><path d="M9 6V10.5M9 12V12.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <div class="auth-title">PhishGuard AI</div>
+        <div class="auth-sub">Organizational Email Security System</div>
+      </div>
+    </div>
+
+    <div class="auth-tabs">
+      <div class="auth-tab active" onclick="showAuthTab('login')">Sign in</div>
+      <div class="auth-tab" onclick="showAuthTab('register')">Register</div>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="auth-form active" id="form-login">
+      <div class="form-group">
+        <label class="form-label">Email address</label>
+        <input class="form-input" id="login-email" type="email" placeholder="your@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="login-pw" type="password" placeholder="••••••••">
+      </div>
+      <button class="btn-primary" onclick="doLogin()">Sign in to PhishGuard</button>
+      <div class="auth-error" id="login-error"></div>
+      <div style="margin-top:14px;font-size:11px;color:var(--text3);text-align:center">
+        Default admin: <strong>admin@phishguard.org</strong> / <strong>Admin@2024</strong>
+      </div>
+    </div>
+
+    <!-- REGISTER -->
+    <div class="auth-form" id="form-register">
+      <div class="form-group">
+        <label class="form-label">Full name</label>
+        <input class="form-input" id="reg-username" type="text" placeholder="John Doe">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email address</label>
+        <input class="form-input" id="reg-email" type="email" placeholder="your@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password (min 8 chars)</label>
+        <input class="form-input" id="reg-pw" type="password" placeholder="••••••••">
+      </div>
+      <button class="btn-primary" onclick="doRegister()">Create account</button>
+      <div class="auth-error" id="reg-error"></div>
+      <div class="auth-success" id="reg-success"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ APP ══════════════════════════════════════════════════════════════════ -->
+<div id="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2L15.5 5.75V12.25L9 16L2.5 12.25V5.75L9 2Z" stroke="white" stroke-width="1.3"/><path d="M9 6V10.5M9 12V12.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+      <div><div class="logo-title">PhishGuard AI</div><div class="logo-sub">Email Security</div></div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Analysis</div>
+      <div class="nav-item active" onclick="showPage('scan')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 3h12M2 6h8M2 9h10M2 12h6" stroke-linecap="round"/></svg>Scan email
+      </div>
+      <div class="nav-item" onclick="showPage('dashboard')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg>Dashboard
+      </div>
+      <div class="nav-item" onclick="showPage('quarantine')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2L14 5v6l-6 3L2 11V5l6-3z"/><path d="M8 8v3M8 5v.5" stroke-linecap="round"/></svg>Quarantine
+        <span class="nav-badge" id="q-badge" style="display:none">0</span>
+      </div>
+      <div class="nav-section">Admin</div>
+      <div class="nav-item" onclick="showPage('model')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2" stroke-linecap="round"/></svg>Model metrics
+      </div>
+      <div class="nav-item" onclick="showPage('gmail')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4h12v8H2z"/><path d="M2 4l6 5 6-5" stroke-linecap="round" stroke-linejoin="round"/></svg>Email integrations
+        <span class="nav-badge" id="gmail-badge" style="display:none;background:var(--green)">●</span>
+      </div>
+      <div class="nav-item" id="nav-users" style="display:none" onclick="showPage('users')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="5" r="3"/><path d="M1 14c0-3 2-5 5-5s5 2 5 5"/><circle cx="12" cy="6" r="2"/><path d="M14 14c0-2-1-3-2-3"/></svg>Users
+      </div>
+      <div class="nav-item" id="nav-audit" style="display:none" onclick="showPage('audit')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M5 6h6M5 9h4" stroke-linecap="round"/></svg>Audit log
+      </div>
+      <div class="nav-section">Reports</div>
+      <div class="nav-item" onclick="downloadReport('pdf')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M10 2v4h4" stroke-linejoin="round"/></svg>Export PDF
+      </div>
+      <div class="nav-item" onclick="downloadReport('excel')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M6 10l4-4M6 6l4 4" stroke-linecap="round"/></svg>Export Excel
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div><div class="user-name" id="user-name">—</div><div class="user-role" id="user-role">—</div></div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Scan email</div>
+      <span class="status-pill" id="conn-pill">Checking…</span>
+      <button class="btn-sm" onclick="retrain()" id="btn-retrain">↺ Retrain model</button>
+    </div>
+
+    <!-- SCAN PAGE -->
+    <div class="page active" id="page-scan">
+      <div class="two-col">
+        <div>
+          <div class="panel">
+            <div class="panel-head">
+              <div><div class="panel-title">Email analyzer</div><div class="panel-sub">Paste email content or upload an .eml file</div></div>
+            </div>
+            <div class="panel-body">
+              <!-- EML Upload -->
+              <div class="upload-zone" onclick="document.getElementById('eml-input').click()" id="upload-zone">
+                <input type="file" id="eml-input" accept=".eml" onchange="handleEml(this)">
+                <div class="upload-zone-text">📎 Upload .eml file (optional)</div>
+                <div class="upload-zone-sub">Click to browse or drag an .eml file here</div>
+              </div>
+
+              <div class="field-group">
+                <label class="field-label">Email body</label>
+                <textarea class="field-textarea" id="email-body" placeholder="Paste the complete email content here…"></textarea>
+              </div>
+              <div class="field-row">
+                <div class="field-group">
+                  <label class="field-label">Sender address</label>
+                  <input class="field-input" id="sender" placeholder="e.g. noreply@paypal-secure.tk">
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Subject line</label>
+                  <input class="field-input" id="subject" placeholder="e.g. URGENT: Verify your account">
+                </div>
+              </div>
+              <div class="field-group">
+                <label class="field-label">Email headers (paste full headers for SPF/DKIM/DMARC analysis)</label>
+                <textarea class="field-textarea" id="raw-headers" style="min-height:70px" placeholder="Paste raw email headers here (optional) — enables SPF, DKIM, DMARC validation"></textarea>
+              </div>
+              <button class="btn-analyze" id="analyze-btn" onclick="analyzeEmail()">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3" stroke-linecap="round"/></svg>
+                Analyze email
+              </button>
+              <div class="progress-wrap" id="progress-wrap">
+                <div class="progress-label"><span id="progress-msg">Extracting features…</span><span id="progress-pct">0%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Result -->
+          <div class="result-wrap" id="result-wrap">
+            <div class="verdict-banner" id="verdict-banner">
+              <div class="gauge-outer">
+                <svg viewBox="0 0 72 72">
+                  <circle cx="36" cy="36" r="28" fill="none" stroke="#1e2433" stroke-width="7"/>
+                  <circle id="gauge-ring" cx="36" cy="36" r="28" fill="none" stroke="#4f8ef7" stroke-width="7" stroke-linecap="round" stroke-dasharray="176" stroke-dashoffset="176" transform="rotate(-90 36 36)" style="transition:stroke-dashoffset .9s ease,stroke .4s"/>
+                </svg>
+                <div class="gauge-label"><div class="gauge-num" id="gauge-num">—</div><div class="gauge-sub">/100</div></div>
+              </div>
+              <div class="verdict-info">
+                <div id="verdict-pill" class="verdict-pill">—</div>
+                <div id="risk-level-text" style="font-size:12px;color:var(--text2);margin:3px 0 4px"></div>
+                <div class="auth-badges" id="auth-badges"></div>
+                <div class="verdict-explain" id="verdict-explain"></div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:3px">ML confidence</div>
+                <div id="confidence-num" style="font-size:20px;font-weight:600">—%</div>
+                <div style="font-size:10px;color:var(--text3);margin-top:2px">Model prob.</div>
+                <div id="model-prob" style="font-size:13px;color:var(--text2)">—%</div>
+              </div>
+            </div>
+
+            <div class="panel" style="margin-bottom:14px">
+              <div class="panel-head"><div class="panel-title">Risk factor analysis (Explainable AI)</div></div>
+              <div class="panel-body"><div id="xai-bars"></div></div>
+            </div>
+
+            <div class="findings-grid" id="findings-grid"></div>
+
+            <div class="panel" style="margin-top:14px">
+              <div class="panel-head"><div class="panel-title">Feature vector (20 extracted features)</div><div class="panel-sub">Hand-crafted NLP + structural signals</div></div>
+              <div class="panel-body"><div class="scroll-y"><table class="feature-table" id="feature-table"></table></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: live feed + session stats -->
+        <div>
+          <div class="panel" style="margin-bottom:14px">
+            <div class="panel-head"><div class="panel-title">Live threat feed</div></div>
+            <div class="panel-body" id="live-feed">
+              <div class="empty"><div class="empty-icon">🛡️</div><div class="empty-title">No scans yet</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div class="panel-title">Session stats</div></div>
+            <div class="panel-body">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center"><div style="font-size:22px;font-weight:600" id="ss-total">0</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Total scanned</div></div>
+                <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center"><div style="font-size:22px;font-weight:600;color:var(--red)" id="ss-threats">0</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Threats found</div></div>
+                <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center"><div style="font-size:22px;font-weight:600;color:var(--orange)" id="ss-rate">—%</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Detection rate</div></div>
+                <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center"><div style="font-size:22px;font-weight:600;color:var(--accent)" id="ss-avg">—</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Avg risk score</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD PAGE -->
+    <div class="page" id="page-dashboard">
+      <div class="stat-grid">
+        <div class="stat-card blue"><div class="stat-num" id="ds-total">—</div><div class="stat-label">Total scanned</div></div>
+        <div class="stat-card red"><div class="stat-num" id="ds-threats">—</div><div class="stat-label">Threats detected</div></div>
+        <div class="stat-card green"><div class="stat-num" id="ds-rate">—%</div><div class="stat-label">Detection rate</div></div>
+        <div class="stat-card purple"><div class="stat-num" id="ds-avg">—</div><div class="stat-label">Avg risk score</div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Scan history</div></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Sender</th><th>Subject</th><th>Verdict</th><th>Score</th><th>SPF</th><th>DKIM</th><th>DMARC</th><th>Date</th></tr></thead>
+            <tbody id="history-body"><tr><td colspan="8"><div class="empty" style="padding:20px"><div class="empty-title">No scan history</div></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUARANTINE PAGE -->
+    <div class="page" id="page-quarantine">
+      <div class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">Quarantine management</div><div class="panel-sub">Phishing emails isolated from users</div></div>
+          <button class="btn-sm" onclick="loadQuarantine()">↺ Refresh</button>
+        </div>
+        <div class="panel-body" id="quarantine-list">
+          <div class="empty"><div class="empty-icon">✅</div><div class="empty-title">Quarantine is empty</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODEL PAGE -->
+    <div class="page" id="page-model">
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-head"><div class="panel-title">Model performance metrics</div><div class="panel-sub">Evaluated on 20% held-out test split</div></div>
+        <div class="panel-body">
+          <div class="metric-grid">
+            <div class="metric-card"><div class="metric-val" id="m-acc">—</div><div class="metric-name">Accuracy</div></div>
+            <div class="metric-card"><div class="metric-val" id="m-prec">—</div><div class="metric-name">Precision</div></div>
+            <div class="metric-card"><div class="metric-val" id="m-rec">—</div><div class="metric-name">Recall</div></div>
+            <div class="metric-card"><div class="metric-val" id="m-f1">—</div><div class="metric-name">F1 Score</div></div>
+            <div class="metric-card"><div class="metric-val" id="m-auc">—</div><div class="metric-name">ROC-AUC</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Classifier architecture</div></div>
+        <div class="panel-body" style="font-size:12px;color:var(--text2);line-height:2">
+          <b style="color:var(--text)">Model:</b> Gradient Boosting Classifier<br>
+          <b style="color:var(--text)">Estimators:</b> 200 trees | <b style="color:var(--text)">Learning rate:</b> 0.1 | <b style="color:var(--text)">Max depth:</b> 4<br>
+          <b style="color:var(--text)">Vectoriser:</b> TF-IDF (1–3 gram, 5000 features, sublinear TF)<br>
+          <b style="color:var(--text)">Auth analysis:</b> SPF / DKIM / DMARC header parsing<br>
+          <b style="color:var(--text)">Features:</b> 20 engineered NLP + structural + authentication signals<br>
+          <b style="color:var(--text)">Split:</b> 80% train / 20% test (stratified) | <b style="color:var(--text)">Explainability:</b> Rule-based XAI factors
+        </div>
+      </div>
+    </div>
+
+    <!-- GMAIL INTEGRATION PAGE -->
+    <div class="page" id="page-gmail">
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-head">
+          <div><div class="panel-title" style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#EA4335"/><path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Gmail</div><div class="panel-sub">PhishGuard polls a connected inbox and quarantines phishing automatically — no copy-paste needed</div></div>
+          <button class="btn-sm" onclick="loadGmailStatus()">↺ Refresh</button>
+        </div>
+        <div class="panel-body">
+          <div id="gmail-accounts-list">
+            <div class="empty"><div class="empty-title">Loading…</div></div>
+          </div>
+          <div style="margin-top:16px">
+            <button class="btn-primary" id="gmail-connect-btn" onclick="connectProvider('gmail')">+ Connect Gmail account</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-head">
+          <div><div class="panel-title" style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#0078D4"/><path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Outlook / Microsoft 365</div><div class="panel-sub">Works with work, school, and personal Outlook/Hotmail/Live accounts</div></div>
+          <button class="btn-sm" onclick="loadOutlookStatus()">↺ Refresh</button>
+        </div>
+        <div class="panel-body">
+          <div id="outlook-accounts-list">
+            <div class="empty"><div class="empty-title">Loading…</div></div>
+          </div>
+          <div style="margin-top:16px">
+            <button class="btn-primary" id="outlook-connect-btn" onclick="connectProvider('outlook')">+ Connect Outlook account</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-head">
+          <div><div class="panel-title" style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#6001D2"/><path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Yahoo / Other (IMAP)</div><div class="panel-sub">Yahoo doesn't support one-click sign-in for third-party apps — uses an app-specific password instead</div></div>
+          <button class="btn-sm" onclick="loadImapStatus()">↺ Refresh</button>
+        </div>
+        <div class="panel-body">
+          <div id="imap-accounts-list">
+            <div class="empty"><div class="empty-title">Loading…</div></div>
+          </div>
+          <div style="margin-top:16px" id="imap-connect-form-wrap">
+            <button class="btn-primary" id="imap-connect-btn" onclick="showImapForm()">+ Connect Yahoo / IMAP account</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">How it works</div></div>
+        <div class="panel-body" style="font-size:12px;color:var(--text2);line-height:2">
+          Connecting an account grants PhishGuard read + quarantine access to
+          that inbox via the provider's own OAuth sign-in (nothing is stored
+          except an access token — never your password). Once connected, both
+          the <b style="color:var(--text)">Inbox</b> and
+          <b style="color:var(--text)">Spam/Junk</b> folders are checked
+          automatically every ~90 seconds using the same detection pipeline
+          as manual scans, regardless of which provider the account is on.
+          Anything scored <b style="color:var(--text)">Phishing</b> is moved
+          into a <b style="color:var(--text)">PhishGuard Quarantine</b>
+          folder/label — reversible any time from the mail provider directly,
+          or from the Quarantine page here.
+          <br><br>
+          Note on Spam/Junk: mail providers typically already filter most
+          phishing into Spam using their own authentication checks before
+          PhishGuard ever sees it — scanning that folder mainly surfaces what
+          was already caught, rather than catching something that was missed.
+          <br><br>
+          First-time setup on the server (a developer account + OAuth
+          credentials with the provider) is a one-time step per provider —
+          see <b style="color:var(--text)">SETUP_GMAIL.md</b> or
+          <b style="color:var(--text)">SETUP_OUTLOOK.md</b> in the project
+          folder if a "Connect" button shows an error.
+        </div>
+      </div>
+    </div>
+    <div class="page" id="page-users">
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">User management</div></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Last login</th><th>Actions</th></tr></thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- AUDIT PAGE -->
+    <div class="page" id="page-audit">
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Audit log</div><div class="panel-sub">All system activities recorded</div></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th><th>IP</th></tr></thead>
+            <tbody id="audit-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Same-origin by default so this works unchanged whether it's served
+// locally (http://127.0.0.1:5000) or from a hosted deployment (e.g. Render) —
+// the frontend is served by the same Flask app as the API, so there is
+// never a cross-origin case in normal use.
+const API = window.location.origin;
+let sessionHistory=[], sessionTotal=0, sessionThreats=0, sessionScoreSum=0;
+let currentUser = null;
+let AUTH_TOKEN = localStorage.getItem('pg_token') || null;
+
+// Helper: all API calls go through here with token
+function apiFetch(url, opts={}){
+  opts.headers = opts.headers || {};
+  if(AUTH_TOKEN) opts.headers['Authorization'] = 'Bearer ' + AUTH_TOKEN;
+  if(!opts.headers['Content-Type'] && !(opts.body instanceof FormData))
+    opts.headers['Content-Type'] = 'application/json';
+  if(opts.body instanceof FormData) delete opts.headers['Content-Type'];
+  return fetch(API + url, opts);
+}
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+function showAuthTab(tab){
+  document.querySelectorAll('.auth-tab').forEach((t,i)=>t.classList.toggle('active',(tab==='login'&&i===0)||(tab==='register'&&i===1)));
+  document.getElementById('form-login').classList.toggle('active',tab==='login');
+  document.getElementById('form-register').classList.toggle('active',tab==='register');
+}
+
+async function doLogin(){
+  const email=document.getElementById('login-email').value.trim();
+  const pw=document.getElementById('login-pw').value;
+  const err=document.getElementById('login-error');
+  err.style.display='none';
+  try{
+    const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pw})});
+    const d=await r.json();
+    if(!r.ok){err.textContent=d.error||'Login failed';err.style.display='block';return;}
+    AUTH_TOKEN = d.token;
+    localStorage.setItem('pg_token', AUTH_TOKEN);
+    currentUser=d.user;
+    launchApp();
+  }catch(e){err.textContent='Cannot connect to backend. Start python app.py first.';err.style.display='block';}
+}
+
+async function doRegister(){
+  const username=document.getElementById('reg-username').value.trim();
+  const email=document.getElementById('reg-email').value.trim();
+  const pw=document.getElementById('reg-pw').value;
+  const err=document.getElementById('reg-error');
+  const suc=document.getElementById('reg-success');
+  err.style.display='none';suc.style.display='none';
+  try{
+    const r=await fetch(API+'/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,email,password:pw})});
+    const d=await r.json();
+    if(!r.ok){err.textContent=d.error||'Registration failed';err.style.display='block';return;}
+    suc.textContent='Account created! You can now sign in.';suc.style.display='block';
+    showAuthTab('login');
+  }catch(e){err.textContent='Connection error';err.style.display='block';}
+}
+
+async function doLogout(){
+  await apiFetch('/auth/logout',{method:'POST'});
+  AUTH_TOKEN=null; localStorage.removeItem('pg_token'); currentUser=null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('auth-screen').style.display='flex';
+}
+
+function launchApp(){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-name').textContent=currentUser.username;
+  document.getElementById('user-role').textContent=currentUser.role==='admin'?'Administrator':'Standard User';
+  document.getElementById('user-avatar').textContent=currentUser.username[0].toUpperCase();
+  if(currentUser.role==='admin'){
+    document.getElementById('nav-users').style.display='flex';
+    document.getElementById('nav-audit').style.display='flex';
+  }
+  checkHealth(); loadQuarantine(); loadModelMetrics(); loadGmailStatus(); loadOutlookStatus(); loadImapStatus();
+  setInterval(checkHealth,15000);
+}
+
+// Check if already logged in (token in localStorage)
+(async()=>{
+  if(!AUTH_TOKEN) return;
+  try{
+    const r=await apiFetch('/auth/me');
+    const d=await r.json();
+    if(d.authenticated){
+      currentUser=d.user;launchApp();
+      // If we just landed back from a Gmail or Outlook OAuth redirect, jump to that page
+      const params=new URLSearchParams(window.location.search);
+      const gmailConnected=params.get('gmail_connected');
+      const outlookConnected=params.get('outlook_connected');
+      const connected=gmailConnected||outlookConnected;
+      if(connected){
+        showPage('gmail'); // 'gmail' is the internal page id for the Email Integrations page
+        document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')==="showPage('gmail')") n.classList.add('active');});
+        window.history.replaceState({},'',window.location.pathname);
+        const label=gmailConnected?'Gmail':'Outlook';
+        setTimeout(()=>alert(label+' connected: '+connected),300);
+      }
+    }
+    else{AUTH_TOKEN=null;localStorage.removeItem('pg_token');}
+  }catch(e){}
+})();
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function showPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  const titles={scan:'Scan email',dashboard:'Dashboard',quarantine:'Quarantine',model:'Model metrics',gmail:'Email integrations',users:'User management',audit:'Audit log'};
+  document.getElementById('topbar-title').textContent=titles[name]||name;
+  event.currentTarget&&event.currentTarget.classList.add('active');
+  if(name==='dashboard') loadDashboard();
+  if(name==='model') loadModelMetrics();
+  if(name==='quarantine') loadQuarantine();
+  if(name==='gmail'){ loadGmailStatus(); loadOutlookStatus(); loadImapStatus(); }
+  if(name==='users') loadUsers();
+  if(name==='audit') loadAudit();
+}
+
+// ── HEALTH ────────────────────────────────────────────────────────────────────
+async function checkHealth(){
+  const pill=document.getElementById('conn-pill');
+  try{
+    const r=await apiFetch('/health',{signal:AbortSignal.timeout(4000)});
+    const d=await r.json();
+    pill.textContent=d.status==='ok'?'Backend connected':'Backend error';
+    pill.className='status-pill '+(d.status==='ok'?'online':'offline');
+  }catch{pill.textContent='Backend offline';pill.className='status-pill offline';}
+}
+
+// ── EML UPLOAD ────────────────────────────────────────────────────────────────
+function handleEml(input){
+  const file=input.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    document.getElementById('upload-zone').innerHTML=`<div class="upload-zone-text">📎 ${file.name}</div><div class="upload-zone-sub">EML file loaded — ready to analyze</div>`;
+  };
+  reader.readAsText(file);
+}
+
+// ── ANALYZE ───────────────────────────────────────────────────────────────────
+async function analyzeEmail(){
+  const btn=document.getElementById('analyze-btn');
+  const emlFile=document.getElementById('eml-input').files[0];
+  const body=document.getElementById('email-body').value.trim();
+  const sender=document.getElementById('sender').value.trim();
+  const subject=document.getElementById('subject').value.trim();
+  const rawHeaders=document.getElementById('raw-headers').value.trim();
+
+  if(!body && !emlFile){document.getElementById('email-body').style.borderColor='var(--red)';return;}
+  document.getElementById('email-body').style.borderColor='';
+
+  btn.disabled=true;
+  document.getElementById('progress-wrap').style.display='block';
+  document.getElementById('result-wrap').style.display='none';
+
+  const steps=[['Tokenising email…',15],['Extracting NLP features…',30],['Checking URL reputation…',50],['Parsing SPF/DKIM/DMARC…',65],['Running ML classifier…',80],['Computing risk score…',92],['Generating XAI explanation…',98]];
+  let si=0;
+  const fill=document.getElementById('progress-fill');
+  const msg=document.getElementById('progress-msg');
+  const pct=document.getElementById('progress-pct');
+  const iv=setInterval(()=>{if(si<steps.length){msg.textContent=steps[si][0];fill.style.width=steps[si][1]+'%';pct.textContent=steps[si][1]+'%';si++;}},400);
+
+  try{
+    let resp;
+    if(emlFile){
+      const fd=new FormData(); fd.append('eml_file',emlFile);
+      resp=await apiFetch('/analyze-email',{method:'POST',body:fd});
+    }else{
+      resp=await apiFetch('/analyze-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email_content:body,sender,subject,raw_headers:rawHeaders})});
+    }
+    const data=await resp.json();
+    clearInterval(iv); fill.style.width='100%'; pct.textContent='100%'; msg.textContent='Analysis complete ✓';
+    setTimeout(()=>{document.getElementById('progress-wrap').style.display='none';renderResult(data,sender||data.sender,subject||data.subject);updateSessionStats(data);btn.disabled=false;},400);
+  }catch(e){
+    clearInterval(iv); msg.textContent='⚠ Error — check backend is running';
+    fill.style.background='var(--red)'; fill.style.width='100%'; btn.disabled=false;
+  }
+}
+
+function authBadge(proto,val){
+  const ok=val&&val!=='none';
+  const pass=(val==='pass'||val==='present'||val==='bestguesspass');
+  const cls=!ok?'none':pass?'pass':'fail';
+  return `<span class="auth-badge ${cls}">${proto.toUpperCase()}: ${val||'none'}</span>`;
+}
+
+function renderResult(r,sender,subject){
+  document.getElementById('result-wrap').style.display='block';
+  const circ=176, offset=circ-(r.risk_score/100)*circ;
+  const ring=document.getElementById('gauge-ring');
+  ring.style.strokeDashoffset=offset;
+  ring.style.stroke=r.risk_score>=70?'var(--red)':r.risk_score>=40?'var(--orange)':'var(--green)';
+  document.getElementById('gauge-num').textContent=r.risk_score;
+
+  const banner=document.getElementById('verdict-banner');
+  banner.className='verdict-banner '+r.verdict;
+  const pill=document.getElementById('verdict-pill');
+  pill.textContent=r.verdict; pill.className='verdict-pill pill-'+r.verdict;
+  document.getElementById('risk-level-text').textContent=r.risk_level+' risk';
+  document.getElementById('verdict-explain').textContent=r.explanation||'';
+  document.getElementById('confidence-num').textContent=(r.confidence||0)+'%';
+  document.getElementById('model-prob').textContent=(r.model_probability||0)+'%';
+
+  document.getElementById('auth-badges').innerHTML=
+    authBadge('SPF',r.spf_result)+authBadge('DKIM',r.dkim_result)+authBadge('DMARC',r.dmarc_result);
+
+  const xai=document.getElementById('xai-bars');
+  xai.innerHTML=(r.factors||[]).length
+    ?(r.factors.map(f=>`<div class="xai-row-item"><div class="xai-name">${f.name}</div><div class="xai-bar-bg"><div class="xai-bar-fill ${f.impact==='negative'?'bar-neg':'bar-pos'}" style="width:${f.weight}%"></div></div><div class="xai-pct">${f.weight}%</div></div>`).join(''))
+    :'<div style="color:var(--text3);font-size:12px">No significant factors detected</div>';
+
+  const fg=document.getElementById('findings-grid');
+  fg.innerHTML=`
+    <div class="finding-card"><div class="finding-head">Phishing signals (${(r.phishing_keywords||[]).length})</div><div class="tag-wrap">${(r.phishing_keywords||[]).length?r.phishing_keywords.map(k=>`<span class="tag tag-red">${k}</span>`).join(''):'<span class="tag tag-gray">None detected</span>'}</div></div>
+    <div class="finding-card"><div class="finding-head">Trust signals (${(r.safe_signals||[]).length})</div><div class="tag-wrap">${(r.safe_signals||[]).length?r.safe_signals.map(s=>`<span class="tag tag-green">${s}</span>`).join(''):'<span class="tag tag-gray">None present</span>'}</div></div>
+    <div class="finding-card full"><div class="finding-head">Suspicious URLs (${(r.suspicious_urls||[]).length})</div><div class="tag-wrap">${(r.suspicious_urls||[]).length?r.suspicious_urls.map(u=>`<span class="tag tag-red">${u}</span>`).join(''):'<span class="tag tag-green">No suspicious URLs</span>'}</div></div>
+    <div class="finding-card full"><div class="finding-head">AI explanation</div><div style="font-size:12px;color:var(--text2);line-height:1.6;margin-top:4px">${r.explanation||''}</div></div>`;
+
+  const fv=r.feature_vector||{};
+  document.getElementById('feature-table').innerHTML=
+    Object.entries(fv).map(([k,v])=>`<tr><td>${k.replace(/_/g,' ')}</td><td>${v}</td></tr>`).join('');
+
+  sessionHistory.unshift({sender:sender||'Unknown',subject:subject||'—',verdict:r.verdict,score:r.risk_score,level:r.risk_level});
+  renderLiveFeed();
+
+  if(r.is_quarantined) setTimeout(loadQuarantine,1000);
+}
+
+function renderLiveFeed(){
+  const feed=document.getElementById('live-feed');
+  if(!sessionHistory.length){feed.innerHTML='<div class="empty"><div class="empty-icon">🛡️</div><div class="empty-title">No scans yet</div></div>';return;}
+  feed.innerHTML=sessionHistory.slice(0,6).map(h=>`
+    <div class="alert-item">
+      <div class="alert-icon ${h.verdict==='Safe'?'ok':h.verdict==='Suspicious'?'warning':'threat'}">${h.verdict==='Safe'?'✓':h.verdict==='Suspicious'?'!':'⚠'}</div>
+      <div class="alert-meta"><div class="alert-sender">${h.sender}</div><div class="alert-sub">${h.subject} · ${h.level} risk</div></div>
+      <div class="alert-score" style="color:${h.score>=70?'var(--red)':h.score>=40?'var(--orange)':'var(--green)'}">${h.score}</div>
+    </div>`).join('');
+}
+
+function updateSessionStats(r){
+  sessionTotal++; if(r.verdict!=='Safe') sessionThreats++; sessionScoreSum+=r.risk_score;
+  document.getElementById('ss-total').textContent=sessionTotal;
+  document.getElementById('ss-threats').textContent=sessionThreats;
+  document.getElementById('ss-rate').textContent=Math.round(sessionThreats/sessionTotal*100)+'%';
+  document.getElementById('ss-avg').textContent=Math.round(sessionScoreSum/sessionTotal);
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+async function loadDashboard(){
+  try{
+    const r=await apiFetch('/stats',{});
+    const d=await r.json();
+    document.getElementById('ds-total').textContent=d.total_scanned;
+    document.getElementById('ds-threats').textContent=d.threats_detected;
+    document.getElementById('ds-rate').textContent=d.detection_rate+'%';
+    document.getElementById('ds-avg').textContent=d.avg_risk_score;
+    const body=document.getElementById('history-body');
+    if(d.recent_scans&&d.recent_scans.length){
+      body.innerHTML=d.recent_scans.map(s=>{
+        const color=s.risk_score>=70?'var(--red)':s.risk_score>=40?'var(--orange)':'var(--green)';
+        const authColor=v=>v==='pass'||v==='present'?'var(--green)':v&&v!=='none'?'var(--red)':'var(--text3)';
+        return `<tr>
+          <td>${(s.sender||'—').substring(0,28)}</td>
+          <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.subject||'—'}</td>
+          <td><span class="verdict-chip" style="background:${s.verdict==='Phishing'?'var(--red-bg)':s.verdict==='Suspicious'?'var(--orange-bg)':'var(--green-bg)'};color:${color}"><span class="chip-dot"></span>${s.verdict}</span></td>
+          <td><div class="score-bar-wrap"><div class="score-bar-bg"><div class="score-bar-fill" style="width:${s.risk_score}%;background:${color}"></div></div><span style="font-size:11px;color:var(--text2);min-width:24px">${s.risk_score}</span></div></td>
+          <td style="color:${authColor(s.spf_result)};font-size:11px">${s.spf_result||'—'}</td>
+          <td style="color:${authColor(s.dkim_result)};font-size:11px">${s.dkim_result||'—'}</td>
+          <td style="color:${authColor(s.dmarc_result)};font-size:11px">${s.dmarc_result||'—'}</td>
+          <td style="color:var(--text3);font-size:11px">${(s.created_at||'').substring(0,10)}</td>
+        </tr>`;
+      }).join('');
+    }
+  }catch(e){console.error(e);}
+}
+
+// ── QUARANTINE ────────────────────────────────────────────────────────────────
+async function loadQuarantine(){
+  try{
+    const r=await apiFetch('/quarantine',{});
+    const d=await r.json();
+    const list=document.getElementById('quarantine-list');
+    const items=d.quarantined||[];
+    const badge=document.getElementById('q-badge');
+    badge.textContent=items.length;
+    badge.style.display=items.length?'inline':'none';
+    if(!items.length){list.innerHTML='<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">Quarantine is empty</div></div>';return;}
+    const sourceBadge=(src)=>{
+      const map={
+        'gmail-inbox':   ['Gmail · Inbox', 'var(--accent)', 'gmail'],
+        'gmail-spam':    ['Gmail · Spam',  'var(--orange)', 'gmail'],
+        'gmail':         ['Gmail',         'var(--accent)', 'gmail'], // legacy scans from before folder tagging existed
+        'outlook-inbox': ['Outlook · Inbox','var(--accent)','outlook'],
+        'outlook-spam':  ['Outlook · Junk', 'var(--orange)','outlook'],
+        'imap-inbox':    ['IMAP · Inbox',  'var(--accent)', 'imap'],
+        'imap-spam':     ['IMAP · Spam',   'var(--orange)', 'imap'],
+        'manual':        ['Manual scan',   'var(--text3)',  null],
+      };
+      const [label,color,iconKey]=map[src]||['Manual scan','var(--text3)',null];
+      const icon=iconKey?providerIcon(iconKey,12):'';
+      return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:${color};border:1px solid ${color};border-radius:10px;padding:1px 8px;white-space:nowrap">${icon}${label}</span>`;
+    };
+    list.innerHTML=items.map(q=>`
+      <div class="qitem" id="qitem-${q.scan_id}">
+        <div class="qitem-head">
+          <div class="qitem-sender">⚠ ${q.sender||'Unknown sender'}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            ${sourceBadge(q.source)}
+            <span style="font-size:11px;color:var(--red);font-weight:600">Risk: ${q.risk_score}/100</span>
+          </div>
+        </div>
+        <div class="qitem-subject">${q.subject||'No subject'}</div>
+        <div class="qitem-meta">Detected: ${(q.created_at||'').substring(0,16)} · SPF: ${q.spf_result||'—'} · DKIM: ${q.dkim_result||'—'} · DMARC: ${q.dmarc_result||'—'}</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5">${q.explanation||''}</div>
+        <div class="qitem-actions">
+          <button class="btn-release" onclick="releaseEmail('${q.scan_id}')">✓ Release</button>
+          <button class="btn-delete" onclick="deleteEmail('${q.scan_id}')">✕ Delete</button>
+        </div>
+      </div>`).join('');
+  }catch(e){}
+}
+
+async function releaseEmail(id){
+  if(!confirm('Release this email from quarantine?')) return;
+  const r=await apiFetch('/quarantine/'+id+'/release',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note:'Released by administrator'})});
+  if(!r.ok){
+    let msg='Could not release this email.';
+    try{ const d=await r.json(); if(d.error) msg=d.error; }catch(e){}
+    alert(msg);
+    return;
+  }
+  loadQuarantine();
+}
+
+async function deleteEmail(id){
+  if(!confirm('Permanently delete this email? If it came from a connected mailbox, it will also be removed there.')) return;
+  const r=await apiFetch('/quarantine/'+id+'/delete',{method:'DELETE'});
+  if(!r.ok){
+    let msg='Could not delete this email.';
+    try{ const d=await r.json(); if(d.error) msg=d.error; }catch(e){}
+    alert(msg);
+    return;
+  }
+  try{
+    const d=await r.json();
+    if(d.mailbox_result && d.mailbox_result.startsWith('FAILED')){
+      alert('Removed from PhishGuard, but there was a problem: '+d.mailbox_result);
+    }
+  }catch(e){}
+  loadQuarantine();
+}
+
+// ── PROVIDER LOGOS (original SVG glyphs, brand-colored — not trademarked artwork) ──
+const PROVIDER_COLORS={gmail:'#EA4335',outlook:'#0078D4',yahoo:'#6001D2',imap:'#6B7280'};
+function providerIcon(colorKey,size=18){
+  const color=PROVIDER_COLORS[colorKey]||PROVIDER_COLORS.imap;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;flex-shrink:0">
+    <circle cx="12" cy="12" r="12" fill="${color}"/>
+    <path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/>
+    <path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+function imapProviderIcon(providerLabel,size=18){
+  // Yahoo gets its own brand color; other IMAP providers (iCloud, Zoho, AOL,
+  // custom) share a neutral grey mail icon rather than guessing at colors
+  // for brands that weren't explicitly asked for.
+  return providerIcon(providerLabel==='yahoo' ? 'yahoo' : 'imap', size);
+}
+
+// ── EMAIL PROVIDER INTEGRATIONS (Gmail + Outlook) ───────────────────────────
+const PROVIDER_CONFIG = {
+  gmail:   { addressField:'gmail_address',   iconKey:'gmail',   label:'Gmail',   setupDoc:'SETUP_GMAIL.md' },
+  outlook: { addressField:'email_address',   iconKey:'outlook', label:'Outlook', setupDoc:'SETUP_OUTLOOK.md' },
+};
+
+async function loadProviderStatus(provider){
+  const cfg=PROVIDER_CONFIG[provider];
+  const badge=document.getElementById('gmail-badge'); // shared badge: lights up if ANY provider has a connected account
+  const list=document.getElementById(provider+'-accounts-list');
+  try{
+    const r=await apiFetch('/auth/'+provider+'/status',{});
+    if(!r.ok){ // provider not configured on the server, or route missing entirely
+      let msg=cfg.label+' integration not set up on the server yet.';
+      try{ const errBody=await r.json(); if(errBody.error) msg=errBody.error; }catch(e){}
+      if(list) list.innerHTML='<div class="empty"><div class="empty-icon">⚙️</div><div class="empty-title">Not available yet</div><div style="font-size:11px;color:var(--text3);margin-top:6px;max-width:400px;margin-left:auto;margin-right:auto">'+msg+'</div></div>';
+      await refreshCombinedBadge();
+      return;
+    }
+    const d=await r.json();
+    const accounts=(d.accounts||[]).filter(a=>a.is_active);
+    if(!list){ await refreshCombinedBadge(); return; }
+    if(!accounts.length){
+      list.innerHTML='<div class="empty"><div class="empty-icon">'+providerIcon(cfg.iconKey,32)+'</div><div class="empty-title">No '+cfg.label+' account connected</div></div>';
+      await refreshCombinedBadge();
+      return;
+    }
+    list.innerHTML=accounts.map(a=>`
+      <div class="qitem">
+        <div class="qitem-head">
+          <div class="qitem-sender" style="display:flex;align-items:center;gap:8px">${providerIcon(cfg.iconKey,18)} ${a[cfg.addressField]}</div>
+          <span style="font-size:11px;color:var(--green);font-weight:600">● Connected</span>
+        </div>
+        <div class="qitem-meta">Connected: ${(a.connected_at||'').substring(0,16)} · Last checked: ${a.last_polled_at?a.last_polled_at.substring(0,16):'not yet'}</div>
+        <div class="qitem-actions">
+          <button class="btn-delete" onclick="disconnectProvider('${provider}',${a.id})">✕ Disconnect</button>
+        </div>
+      </div>`).join('');
+    await refreshCombinedBadge();
+  }catch(e){
+    await refreshCombinedBadge();
+  }
+}
+
+// The sidebar badge is shared across providers — lights up green if ANY
+// provider has at least one active connected account.
+async function refreshCombinedBadge(){
+  const badge=document.getElementById('gmail-badge');
+  if(!badge) return;
+  let anyConnected=false;
+  for(const provider of Object.keys(PROVIDER_CONFIG)){
+    try{
+      const r=await apiFetch('/auth/'+provider+'/status',{});
+      if(r.ok){
+        const d=await r.json();
+        if((d.accounts||[]).some(a=>a.is_active)){ anyConnected=true; break; }
+      }
+    }catch(e){}
+  }
+  if(!anyConnected){
+    try{
+      const r=await apiFetch('/auth/imap/status',{});
+      if(r.ok){
+        const d=await r.json();
+        if((d.accounts||[]).some(a=>a.is_active)) anyConnected=true;
+      }
+    }catch(e){}
+  }
+  badge.style.display=anyConnected?'inline-block':'none';
+}
+
+function loadGmailStatus(){ return loadProviderStatus('gmail'); }
+function loadOutlookStatus(){ return loadProviderStatus('outlook'); }
+
+async function connectProvider(provider){
+  const cfg=PROVIDER_CONFIG[provider];
+  if(!AUTH_TOKEN){alert('Please log in first.');return;}
+  // Check the server has this provider configured before navigating away —
+  // otherwise the user just lands on a raw error page with no context.
+  try{
+    const r=await apiFetch('/auth/'+provider+'/status',{});
+    if(!r.ok){
+      let msg=cfg.label+' integration is not set up on this server yet. See '+cfg.setupDoc+'.';
+      try{ const d=await r.json(); if(d.error) msg=d.error; }catch(e){}
+      alert(msg);
+      return;
+    }
+  }catch(e){
+    alert('Could not reach the server to check '+cfg.label+' setup status.');
+    return;
+  }
+  // Full navigation (not fetch) — this hands off to the provider's own consent screen
+  window.location.href=API+'/auth/'+provider+'/connect?token='+encodeURIComponent(AUTH_TOKEN);
+}
+
+async function disconnectProvider(provider,accountId){
+  const cfg=PROVIDER_CONFIG[provider];
+  if(!confirm('Disconnect this '+cfg.label+' account? Automated scanning will stop for it, and any of its emails currently in Quarantine will be cleared from PhishGuard too.')) return;
+  const r=await apiFetch('/auth/'+provider+'/disconnect/'+accountId,{method:'DELETE'});
+  try{
+    const d=await r.json();
+    if(typeof d.cleared_quarantine_items==='number' && d.cleared_quarantine_items>0){
+      alert(cfg.label+' disconnected. '+d.cleared_quarantine_items+' quarantined email(s) from that account were also cleared from PhishGuard.');
+    }
+  }catch(e){}
+  loadProviderStatus(provider);
+  loadQuarantine(); // in case the Quarantine page is currently open in this session
+}
+
+// ── IMAP / YAHOO (form-based, not OAuth redirect) ───────────────────────────
+let IMAP_PRESETS_CACHE=null;
+
+async function loadImapStatus(){
+  const list=document.getElementById('imap-accounts-list');
+  try{
+    const r=await apiFetch('/auth/imap/status',{});
+    if(!r.ok){
+      if(list) list.innerHTML='<div class="empty"><div class="empty-icon">⚙️</div><div class="empty-title">Not available</div></div>';
+      await refreshCombinedBadge();
+      return;
+    }
+    const d=await r.json();
+    const accounts=(d.accounts||[]).filter(a=>a.is_active);
+    if(!list){ await refreshCombinedBadge(); return; }
+    if(!accounts.length){
+      list.innerHTML='<div class="empty"><div class="empty-icon">'+imapProviderIcon('yahoo',32)+'</div><div class="empty-title">No Yahoo/IMAP account connected</div></div>';
+      await refreshCombinedBadge();
+      return;
+    }
+    list.innerHTML=accounts.map(a=>`
+      <div class="qitem">
+        <div class="qitem-head">
+          <div class="qitem-sender" style="display:flex;align-items:center;gap:8px">${imapProviderIcon(a.provider_label,18)} ${a.username} <span style="color:var(--text3);font-weight:400">(${a.provider_label})</span></div>
+          <span style="font-size:11px;color:var(--green);font-weight:600">● Connected</span>
+        </div>
+        <div class="qitem-meta">Connected: ${(a.connected_at||'').substring(0,16)} · Last checked: ${a.last_polled_at?a.last_polled_at.substring(0,16):'not yet'}</div>
+        <div class="qitem-actions">
+          <button class="btn-delete" onclick="disconnectImap(${a.id})">✕ Disconnect</button>
+        </div>
+      </div>`).join('');
+    await refreshCombinedBadge();
+  }catch(e){
+    await refreshCombinedBadge();
+  }
+}
+
+async function disconnectImap(accountId){
+  if(!confirm('Disconnect this account? Automated scanning will stop for it, and any of its emails currently in Quarantine will be cleared from PhishGuard too.')) return;
+  const r=await apiFetch('/auth/imap/disconnect/'+accountId,{method:'DELETE'});
+  try{
+    const d=await r.json();
+    if(typeof d.cleared_quarantine_items==='number' && d.cleared_quarantine_items>0){
+      alert('Disconnected. '+d.cleared_quarantine_items+' quarantined email(s) from that account were also cleared from PhishGuard.');
+    }
+  }catch(e){}
+  loadImapStatus();
+  loadQuarantine();
+}
+
+async function showImapForm(){
+  if(!IMAP_PRESETS_CACHE){
+    try{ const r=await apiFetch('/auth/imap/presets',{}); IMAP_PRESETS_CACHE=(await r.json()).presets||{}; }
+    catch(e){ IMAP_PRESETS_CACHE={}; }
+  }
+  const presetOptions=Object.keys(IMAP_PRESETS_CACHE).map(k=>`<option value="${k}">${k.charAt(0).toUpperCase()+k.slice(1)}</option>`).join('');
+  document.getElementById('imap-connect-form-wrap').innerHTML=`
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;max-width:480px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:10px">Connect a Yahoo / IMAP account</div>
+      <label style="font-size:11px;color:var(--text2)">Provider</label>
+      <select id="imap-provider-select" class="form-input" style="margin-bottom:8px" onchange="applyImapPreset()">
+        ${presetOptions}<option value="other">Other (enter manually)</option>
+      </select>
+      <label style="font-size:11px;color:var(--text2)">Email address</label>
+      <input id="imap-username" class="form-input" style="margin-bottom:8px" placeholder="you@yahoo.com">
+      <label style="font-size:11px;color:var(--text2)">App password <span style="color:var(--text3)">(not your normal password — see SETUP_YAHOO.md)</span></label>
+      <input id="imap-app-password" type="password" class="form-input" style="margin-bottom:8px">
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div style="flex:2"><label style="font-size:11px;color:var(--text2)">IMAP host</label><input id="imap-host" class="form-input"></div>
+        <div style="flex:1"><label style="font-size:11px;color:var(--text2)">Port</label><input id="imap-port" class="form-input" value="993"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div style="flex:1"><label style="font-size:11px;color:var(--text2)">Spam folder name</label><input id="imap-spam-folder" class="form-input"></div>
+        <div style="flex:1"><label style="font-size:11px;color:var(--text2)">Trash folder name</label><input id="imap-trash-folder" class="form-input"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary" onclick="submitImapForm()">Test & Connect</button>
+        <button class="btn-sm" onclick="cancelImapForm()">Cancel</button>
+      </div>
+      <div id="imap-form-error" style="color:var(--red);font-size:11px;margin-top:8px"></div>
+    </div>`;
+  applyImapPreset();
+}
+
+function applyImapPreset(){
+  const key=document.getElementById('imap-provider-select').value;
+  const preset=IMAP_PRESETS_CACHE[key];
+  if(preset){
+    document.getElementById('imap-host').value=preset.host||'';
+    document.getElementById('imap-port').value=preset.port||993;
+    document.getElementById('imap-spam-folder').value=preset.spam_folder||'Spam';
+    document.getElementById('imap-trash-folder').value=preset.trash_folder||'Trash';
+  }else{
+    document.getElementById('imap-host').value='';
+    document.getElementById('imap-spam-folder').value='Spam';
+    document.getElementById('imap-trash-folder').value='Trash';
+  }
+}
+
+function cancelImapForm(){
+  document.getElementById('imap-connect-form-wrap').innerHTML='<button class="btn-primary" id="imap-connect-btn" onclick="showImapForm()">+ Connect Yahoo / IMAP account</button>';
+}
+
+async function submitImapForm(){
+  const providerLabel=document.getElementById('imap-provider-select').value;
+  const username=document.getElementById('imap-username').value.trim();
+  const appPassword=document.getElementById('imap-app-password').value;
+  const imapHost=document.getElementById('imap-host').value.trim();
+  const imapPort=document.getElementById('imap-port').value;
+  const spamFolder=document.getElementById('imap-spam-folder').value.trim();
+  const trashFolder=document.getElementById('imap-trash-folder').value.trim();
+  const errEl=document.getElementById('imap-form-error');
+  errEl.textContent='';
+
+  if(!username||!appPassword||!imapHost){ errEl.textContent='Email, app password, and IMAP host are required.'; return; }
+
+  try{
+    const r=await apiFetch('/auth/imap/connect',{method:'POST',body:JSON.stringify({
+      provider_label:providerLabel, username, app_password:appPassword,
+      imap_host:imapHost, imap_port:imapPort, spam_folder:spamFolder, trash_folder:trashFolder
+    })});
+    const d=await r.json();
+    if(!r.ok){ errEl.textContent=d.error||'Connection failed.'; return; }
+    cancelImapForm();
+    loadImapStatus();
+  }catch(e){
+    errEl.textContent='Could not reach the server.';
+  }
+}
+
+// ── MODEL METRICS ─────────────────────────────────────────────────────────────
+async function loadModelMetrics(){
+  try{
+    const r=await apiFetch('/model-info',{});
+    const d=await r.json();
+    if(d.accuracy){
+      document.getElementById('m-acc').textContent=(d.accuracy*100).toFixed(1)+'%';
+      document.getElementById('m-prec').textContent=(d.precision*100).toFixed(1)+'%';
+      document.getElementById('m-rec').textContent=(d.recall*100).toFixed(1)+'%';
+      document.getElementById('m-f1').textContent=(d.f1*100).toFixed(1)+'%';
+      document.getElementById('m-auc').textContent=d.auc.toFixed(3);
+    }
+  }catch(e){}
+}
+
+async function retrain(){
+  const btn=document.getElementById('btn-retrain');
+  btn.textContent='Retraining…'; btn.disabled=true;
+  try{
+    const r=await apiFetch('/retrain',{method:'POST'});
+    const d=await r.json();
+    btn.textContent='✓ Retrained'; loadModelMetrics();
+    setTimeout(()=>{btn.textContent='↺ Retrain model';btn.disabled=false;},2000);
+  }catch{btn.textContent='⚠ Error';setTimeout(()=>{btn.textContent='↺ Retrain model';btn.disabled=false;},2000);}
+}
+
+// ── USERS ─────────────────────────────────────────────────────────────────────
+async function loadUsers(){
+  try{
+    const r=await apiFetch('/users',{});
+    const d=await r.json();
+    document.getElementById('users-body').innerHTML=(d.users||[]).map(u=>`
+      <tr>
+        <td>${u.id}</td><td>${u.username}</td><td>${u.email}</td>
+        <td><span class="verdict-chip" style="background:${u.role==='admin'?'var(--purple-bg)':'var(--green-bg)'};color:${u.role==='admin'?'var(--purple)':'var(--green)'}">${u.role}</span></td>
+        <td style="color:var(--text3);font-size:11px">${(u.last_login||'Never').substring(0,16)}</td>
+        <td><button class="btn-sm" onclick="setRole(${u.id},'${u.role==='admin'?'user':'admin'}')">Make ${u.role==='admin'?'user':'admin'}</button></td>
+      </tr>`).join('');
+  }catch(e){}
+}
+
+async function setRole(id,role){
+  await apiFetch('/users/'+id+'/role',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})});
+  loadUsers();
+}
+
+// ── AUDIT ─────────────────────────────────────────────────────────────────────
+async function loadAudit(){
+  try{
+    const r=await apiFetch('/audit-log?limit=50',{});
+    const d=await r.json();
+    document.getElementById('audit-body').innerHTML=(d.logs||[]).map(l=>`
+      <tr>
+        <td style="color:var(--text3);font-size:11px">${(l.created_at||'').substring(0,16)}</td>
+        <td>${l.username||'—'}</td>
+        <td><span class="tag tag-blue">${l.action}</span></td>
+        <td style="color:var(--text2);font-size:11px">${l.details||'—'}</td>
+        <td style="color:var(--text3);font-size:11px">${l.ip_address||'—'}</td>
+      </tr>`).join('');
+  }catch(e){}
+}
+
+// ── REPORTS ───────────────────────────────────────────────────────────────────
+async function downloadReport(type){
+  try{
+    const r=await apiFetch('/report/'+type,{});
+    if(!r.ok){const d=await r.json();alert(d.error||'Report generation failed');return;}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='PhishGuard_Report.'+(type==='pdf'?'pdf':'xlsx');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){alert('Report failed: '+e.message);}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: phishguard-ai
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r backend/requirements.txt && python backend/predownload_nltk.py"
+    startCommand: "python backend/app.py"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      # Optional — only needed if you set up Gmail/Outlook OAuth (see
+      # SETUP_GMAIL.md / SETUP_OUTLOOK.md). Leave unset and those
+      # integrations just stay disabled; manual .eml upload and IMAP
+      # (Yahoo etc.) still work fine without them.
+      # - key: GOOGLE_REDIRECT_URI
+      #   value: https://YOUR-RENDER-URL.onrender.com/auth/gmail/callback
+      # - key: OUTLOOK_REDIRECT_URI
+      #   value: https://YOUR-RENDER-URL.onrender.com/auth/outlook/callback
