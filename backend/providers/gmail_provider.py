@@ -40,8 +40,18 @@ _client_config_cache = {}
 
 def _load_client_config():
     if not _client_config_cache:
-        with open(CLIENT_SECRETS_FILE) as f:
-            _client_config_cache.update(json.load(f))
+        # On a hosted deployment (Render, etc.) you generally can't put a
+        # secrets file on disk permanently — the filesystem resets on every
+        # redeploy. So: prefer GOOGLE_CLIENT_SECRETS_JSON (the whole JSON
+        # file's content, pasted as one environment variable) if it's set;
+        # fall back to reading an actual file for local development, where
+        # a file on disk is simple and persists fine.
+        raw_json = os.environ.get("GOOGLE_CLIENT_SECRETS_JSON")
+        if raw_json:
+            _client_config_cache.update(json.loads(raw_json))
+        else:
+            with open(CLIENT_SECRETS_FILE) as f:
+                _client_config_cache.update(json.load(f))
     return _client_config_cache
 
 

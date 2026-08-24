@@ -43,8 +43,17 @@ _secrets_cache = {}
 
 def _load_secrets():
     if not _secrets_cache:
-        with open(OUTLOOK_SECRETS_FILE) as f:
-            _secrets_cache.update(json.load(f))
+        # Same reasoning as gmail_provider.py: on a hosted deployment the
+        # filesystem resets on every redeploy, so a manually-placed secrets
+        # file won't survive. Prefer OUTLOOK_SECRETS_JSON (the whole file's
+        # content as one env var) when set; fall back to a real file for
+        # local development.
+        raw_json = os.environ.get("OUTLOOK_SECRETS_JSON")
+        if raw_json:
+            _secrets_cache.update(json.loads(raw_json))
+        else:
+            with open(OUTLOOK_SECRETS_FILE) as f:
+                _secrets_cache.update(json.load(f))
     return _secrets_cache
 
 
