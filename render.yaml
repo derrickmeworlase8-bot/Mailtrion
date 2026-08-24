@@ -10,6 +10,12 @@ services:
         value: 3.11.9
       - key: FLASK_SECRET_KEY
         generateValue: true
+      # Sets the initial admin login on first deploy. If you leave this out,
+      # the app generates a random password itself and prints it once to
+      # the Render service logs — check Logs in the Render dashboard right
+      # after your first deploy if you don't set this.
+      - key: ADMIN_PASSWORD
+        sync: false
       # Optional — only needed if you set up Gmail/Outlook OAuth (see
       # SETUP_GMAIL.md / SETUP_OUTLOOK.md). Leave unset and those
       # integrations just stay disabled; manual .eml upload and IMAP

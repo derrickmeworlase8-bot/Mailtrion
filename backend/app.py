@@ -87,11 +87,31 @@ LEMMATIZER  = WordNetLemmatizer()
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "phishguard-secret-2024-derek-btech")
+
+# Cap request size so a large upload can't exhaust server memory/disk on a
+# public deployment. 15MB comfortably covers any real .eml file.
+app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024
+
 # In-memory token store (maps token -> user info)
 TOKENS = {}
 
+# In-memory login-attempt tracker for brute-force throttling (see /auth/login).
+# Fast repeated guessing (LOGIN_MAX_ATTEMPTS within LOGIN_WINDOW_SECONDS)
+# triggers a much longer LOGIN_LOCKOUT_SECONDS lockout — short window to
+# actually catch an automated guesser, long lockout so it isn't worth
+# retrying quickly. Change LOGIN_MAX_ATTEMPTS to 3 for a stricter threshold.
+LOGIN_ATTEMPTS = {}       # email -> list of recent failed-attempt timestamps
+LOGIN_LOCKOUTS = {}       # email -> datetime the lockout ends
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 60
+LOGIN_LOCKOUT_SECONDS = 60 * 60  # 1 hour
+
 CORS(app, supports_credentials=True,
      resources={r"/*": {"origins": "*"}})
+
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({"error": "File too large (max 15MB)."}), 413
 
 @app.after_request
 def add_cors(response):
@@ -263,14 +283,35 @@ def init_db():
     # Create default admin if no users
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone()[0] == 0:
+        # A fixed default password here would mean every deployment of this
+        # code shares the same admin login — anyone who has seen this source
+        # file could log into any instance. Instead: read it from an env var
+        # if the operator set one (ADMIN_PASSWORD on Render, etc.), otherwise
+        # generate a random one and print it ONCE to the startup log — the
+        # operator must go retrieve it from there before anyone else does.
+        admin_password = os.environ.get("ADMIN_PASSWORD")
+        generated = admin_password is None
+        if generated:
+            admin_password = secrets.token_urlsafe(12)
+
         c.execute("""INSERT INTO users
             (username,email,password_hash,role,created_at)
             VALUES (?,?,?,?,?)""",
             ("admin","admin@phishguard.org",
-             generate_password_hash("Admin@2024"),
+             generate_password_hash(admin_password),
              "admin", datetime.utcnow().isoformat()))
         conn.commit()
-        log.info("Default admin created: admin@phishguard.org / Admin@2024")
+        if generated:
+            log.warning(
+                f"═══ Default admin created — SAVE THIS NOW, it will not be shown again ═══\n"
+                f"    email:    admin@phishguard.org\n"
+                f"    password: {admin_password}\n"
+                f"    Log in once and change it, or set ADMIN_PASSWORD as an env var "
+                f"before first run to choose your own.\n"
+                f"══════════════════════════════════════════════════════════════════════"
+            )
+        else:
+            log.info("Default admin created using ADMIN_PASSWORD from environment.")
 
     conn.close()
     log.info("Database initialised")
@@ -763,14 +804,44 @@ def login():
     em = (d.get("email","")).strip().lower()
     pw = d.get("password","")
 
+    # ── Brute-force throttling ──────────────────────────────────────────────
+    # Without this, a public deployment can be hit with unlimited password
+    # guesses against any known email address. This is a simple in-memory
+    # per-email lockout — not as robust as a dedicated rate-limiting service,
+    # but it stops trivial automated guessing, which is the realistic threat
+    # for a project like this.
+    now = datetime.utcnow()
+
+    lockout_until = LOGIN_LOCKOUTS.get(em)
+    if lockout_until and now < lockout_until:
+        remaining = int((lockout_until - now).total_seconds() // 60) + 1
+        audit(None, em, "LOGIN_LOCKED", "Attempted login while locked out")
+        return jsonify({"error": f"Too many failed login attempts. Try again in about {remaining} minute(s)."}), 429
+    elif lockout_until and now >= lockout_until:
+        LOGIN_LOCKOUTS.pop(em, None)
+        LOGIN_ATTEMPTS.pop(em, None)
+
+    attempts = LOGIN_ATTEMPTS.get(em, [])
+    attempts = [t for t in attempts if (now - t).total_seconds() < LOGIN_WINDOW_SECONDS]
+
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE email=? AND is_active=1",
                         (em,)).fetchone()
     conn.close()
 
     if not user or not check_password_hash(user["password_hash"], pw):
+        attempts.append(now)
+        LOGIN_ATTEMPTS[em] = attempts
+        if len(attempts) >= LOGIN_MAX_ATTEMPTS:
+            LOGIN_LOCKOUTS[em] = now + timedelta(seconds=LOGIN_LOCKOUT_SECONDS)
+            LOGIN_ATTEMPTS.pop(em, None)
+            audit(None, em, "LOGIN_LOCKED", "Too many failed attempts — locked for 1 hour")
+            return jsonify({"error": "Too many failed login attempts. Try again in about 60 minutes."}), 429
         audit(None, em, "LOGIN_FAIL", "Invalid credentials")
         return jsonify({"error":"Invalid email or password"}), 401
+
+    LOGIN_ATTEMPTS.pop(em, None)
+    LOGIN_LOCKOUTS.pop(em, None)
 
     token = secrets.token_hex(32)
     TOKENS[token] = {
