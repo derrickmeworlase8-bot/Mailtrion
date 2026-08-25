@@ -103,7 +103,7 @@ TOKENS = {}
 # retrying quickly. Change LOGIN_MAX_ATTEMPTS to 3 for a stricter threshold.
 LOGIN_ATTEMPTS = {}       # email -> list of recent failed-attempt timestamps
 LOGIN_LOCKOUTS = {}       # email -> datetime the lockout ends
-LOGIN_MAX_ATTEMPTS = 5
+LOGIN_MAX_ATTEMPTS = 3
 LOGIN_WINDOW_SECONDS = 60
 LOGIN_LOCKOUT_SECONDS = 60 * 60  # 1 hour
 
@@ -317,6 +317,15 @@ def init_db():
     if "otp_attempts" not in existing_user_cols:
         c.execute("ALTER TABLE users ADD COLUMN otp_attempts INTEGER DEFAULT 0")
         log.info("Migration: added users.otp_attempts")
+    if "reset_code" not in existing_user_cols:
+        c.execute("ALTER TABLE users ADD COLUMN reset_code TEXT")
+        log.info("Migration: added users.reset_code")
+    if "reset_expires" not in existing_user_cols:
+        c.execute("ALTER TABLE users ADD COLUMN reset_expires TEXT")
+        log.info("Migration: added users.reset_expires")
+    if "reset_attempts" not in existing_user_cols:
+        c.execute("ALTER TABLE users ADD COLUMN reset_attempts INTEGER DEFAULT 0")
+        log.info("Migration: added users.reset_attempts")
     conn.commit()
 
     # Create default admin if no users
@@ -851,9 +860,84 @@ def register():
                 "email_sent": False
             }), 201
     except sqlite3.IntegrityError:
-        return jsonify({"error":"Username or email already exists"}), 409
+        return jsonify({
+            "error": "An account with this email or username already exists.",
+            "account_exists": True
+        }), 409
     finally:
         conn.close()
+
+
+@app.route("/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    d = request.get_json()
+    em = (d.get("email","")).strip().lower()
+    if not em:
+        return jsonify({"error": "Email is required"}), 400
+
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE email=? AND is_active=1", (em,)).fetchone()
+
+    # Same response whether or not the account exists, so this can't be used
+    # to check which emails are registered on the system.
+    if not user:
+        conn.close()
+        return jsonify({"message": "If that account exists, a reset code was sent to its email."}), 200
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    expires = (datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)).isoformat()
+    conn.execute(
+        "UPDATE users SET reset_code=?, reset_expires=?, reset_attempts=0 WHERE id=?",
+        (code, expires, user["id"])
+    )
+    conn.commit()
+    mailer.send_password_reset_email(user["email"], user["username"], code)
+    audit(user["id"], user["username"], "PASSWORD_RESET_REQUESTED", f"Reset code sent to {em}")
+    conn.close()
+    return jsonify({"message": "If that account exists, a reset code was sent to its email."}), 200
+
+
+@app.route("/auth/reset-password", methods=["POST"])
+def reset_password():
+    d = request.get_json()
+    em = (d.get("email","")).strip().lower()
+    code = (d.get("code","")).strip()
+    new_pw = d.get("new_password","")
+
+    if not em or not code or not new_pw:
+        return jsonify({"error": "Email, code, and new password are all required"}), 400
+    if len(new_pw) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE email=?", (em,)).fetchone()
+
+    if not user or not user["reset_code"] or not user["reset_expires"]:
+        conn.close()
+        return jsonify({"error": "Invalid or expired reset code"}), 400
+
+    if datetime.utcnow() > datetime.fromisoformat(user["reset_expires"]):
+        conn.close()
+        return jsonify({"error": "Reset code expired. Request a new one."}), 400
+
+    if user["reset_attempts"] >= OTP_MAX_VERIFY_ATTEMPTS:
+        conn.close()
+        return jsonify({"error": "Too many incorrect attempts. Request a new reset code."}), 429
+
+    if code != user["reset_code"]:
+        conn.execute("UPDATE users SET reset_attempts = reset_attempts + 1 WHERE id=?", (user["id"],))
+        conn.commit()
+        conn.close()
+        return jsonify({"error": "Incorrect code"}), 400
+
+    conn.execute(
+        "UPDATE users SET password_hash=?, reset_code=NULL, reset_expires=NULL, reset_attempts=0 WHERE id=?",
+        (generate_password_hash(new_pw), user["id"])
+    )
+    conn.commit()
+    audit(user["id"], user["username"], "PASSWORD_RESET", f"{em} reset their password")
+    conn.close()
+    return jsonify({"message": "Password reset. You can now sign in with your new password."}), 200
 
 
 @app.route("/auth/verify-otp", methods=["POST"])
@@ -1584,6 +1668,16 @@ if __name__ == "__main__":
         any_provider_configured = True
     except ImportError as e:
         log.warning(f"IMAP integration dependencies missing ({e}).")
+
+    # --- One-click "Sign in with Google / Microsoft" ────────────────────────
+    # Independent of the mailbox-connect integrations above, but reuses the
+    # same credential files — registers Google/Microsoft login only for
+    # whichever ones are actually configured on this deployment.
+    try:
+        from social_login import register_social_login_routes
+        register_social_login_routes(app, get_db, audit, TOKENS)
+    except ImportError as e:
+        log.warning(f"Social login dependencies missing ({e}).")
 
     # ── One shared poller for every configured provider ─────────────────────
     # Runs regardless of which providers are configured — a provider with
