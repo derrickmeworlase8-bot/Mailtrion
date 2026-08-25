@@ -36,6 +36,14 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .form-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:block}
 .form-input{width:100%;padding:10px 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px;transition:border-color .15s}
 .form-input:focus{outline:none;border-color:var(--accent)}
+/* ── VIEWER ROLE (read-only) — hide anything that mutates state ── */
+body.role-viewer .btn-analyze,
+body.role-viewer .qitem-actions,
+body.role-viewer #gmail-connect-btn,
+body.role-viewer #outlook-connect-btn,
+body.role-viewer #imap-connect-form-wrap,
+body.role-viewer #btn-retrain{display:none !important}
+body.role-viewer .upload-zone{pointer-events:none;opacity:.5}
 .btn-primary{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
 .auth-divider{display:flex;align-items:center;gap:12px;margin:18px 0;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
 .auth-divider::before,.auth-divider::after{content:"";flex:1;height:1px;background:var(--border)}
@@ -288,7 +296,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       </div>
       <div class="form-group">
         <label class="form-label">Password (min 8 chars)</label>
-        <input class="form-input" id="reg-pw" type="password" placeholder="••••••••">
+        <input class="form-input" id="reg-pw" type="password" placeholder="••••••••" oninput="updatePwStrength('reg-pw','reg-pw-strength')">
+        <div id="reg-pw-strength" style="font-size:11px;margin-top:5px;display:none"></div>
       </div>
       <button class="btn-primary" onclick="doRegister()">Create account</button>
       <div class="auth-error" id="reg-error"></div>
@@ -347,7 +356,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         </div>
         <div class="form-group">
           <label class="form-label">New password</label>
-          <input class="form-input" id="reset-new-pw" type="password" placeholder="At least 8 characters">
+          <input class="form-input" id="reset-new-pw" type="password" placeholder="At least 8 characters" oninput="updatePwStrength('reset-new-pw','reset-pw-strength')">
+          <div id="reset-pw-strength" style="font-size:11px;margin-top:5px;display:none"></div>
         </div>
         <button class="btn-primary" onclick="doResetPassword()">Reset password</button>
       </div>
@@ -662,7 +672,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <div class="panel-head"><div class="panel-title">User management</div></div>
         <div style="overflow-x:auto">
           <table class="data-table">
-            <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Last login</th><th>Actions</th></tr></thead>
+            <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
             <tbody id="users-body"></tbody>
           </table>
         </div>
@@ -725,6 +735,29 @@ function goToVerify(email){
   document.getElementById('form-login').classList.remove('active');
   document.getElementById('form-register').classList.remove('active');
   document.getElementById('form-verify').classList.add('active');
+}
+
+function updatePwStrength(inputId, displayId){
+  const pw = document.getElementById(inputId).value;
+  const el = document.getElementById(displayId);
+  if(!pw){ el.style.display='none'; return; }
+  el.style.display='block';
+  const checks = [
+    {ok: pw.length>=8, label:'8+ characters'},
+    {ok: /[A-Z]/.test(pw), label:'uppercase letter'},
+    {ok: /[a-z]/.test(pw), label:'lowercase letter'},
+    {ok: /[^A-Za-z0-9]/.test(pw), label:'special character'},
+  ];
+  const passedCount = checks.filter(c=>c.ok).length;
+  const missing = checks.filter(c=>!c.ok).map(c=>c.label);
+  let strength, color;
+  if(passedCount===4){ strength='Strong'; color='var(--green)'; }
+  else if(passedCount>=2){ strength='Medium'; color='var(--orange)'; }
+  else { strength='Weak'; color='var(--red)'; }
+  el.style.color = color;
+  el.textContent = missing.length
+    ? strength+' — still needs: '+missing.join(', ')
+    : strength+' password ✓';
 }
 
 function socialLogin(provider){
@@ -869,8 +902,9 @@ function launchApp(){
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('user-name').textContent=currentUser.username;
-  document.getElementById('user-role').textContent=currentUser.role==='admin'?'Administrator':'Standard User';
+  document.getElementById('user-role').textContent=currentUser.role==='admin'?'Administrator':currentUser.role==='viewer'?'Viewer':'Analyst';
   document.getElementById('user-avatar').textContent=currentUser.username[0].toUpperCase();
+  document.body.classList.toggle('role-viewer', currentUser.role==='viewer');
   if(currentUser.role==='admin'){
     document.getElementById('nav-users').style.display='flex';
     document.getElementById('nav-audit').style.display='flex';
@@ -1453,22 +1487,53 @@ async function retrain(){
 }
 
 // ── USERS ─────────────────────────────────────────────────────────────────────
+const ROLE_LABELS={admin:'Admin',user:'Analyst',viewer:'Viewer'};
+const ROLE_COLORS={admin:'var(--purple)',user:'var(--green)',viewer:'var(--text3)'};
+
 async function loadUsers(){
   try{
     const r=await apiFetch('/users',{});
     const d=await r.json();
-    document.getElementById('users-body').innerHTML=(d.users||[]).map(u=>`
+    document.getElementById('users-body').innerHTML=(d.users||[]).map(u=>{
+      const roleColor=ROLE_COLORS[u.role]||'var(--text2)';
+      const roleLabel=ROLE_LABELS[u.role]||u.role;
+      const verifiedBadge=u.is_verified
+        ?'<span class="tag tag-green">Verified</span>'
+        :'<span class="tag tag-gray">Unverified</span>';
+      const activeBadge=u.is_active
+        ?''
+        :'<span class="tag tag-red" style="margin-left:5px">Deactivated</span>';
+      return `
       <tr>
         <td>${u.id}</td><td>${u.username}</td><td>${u.email}</td>
-        <td><span class="verdict-chip" style="background:${u.role==='admin'?'var(--purple-bg)':'var(--green-bg)'};color:${u.role==='admin'?'var(--purple)':'var(--green)'}">${u.role}</span></td>
+        <td>
+          <select class="field-input" style="padding:4px 8px;font-size:11px;width:auto" onchange="setRole(${u.id},this.value)">
+            <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
+            <option value="user" ${u.role==='user'?'selected':''}>Analyst</option>
+            <option value="viewer" ${u.role==='viewer'?'selected':''}>Viewer</option>
+          </select>
+        </td>
+        <td>${verifiedBadge}${activeBadge}</td>
         <td style="color:var(--text3);font-size:11px">${(u.last_login||'Never').substring(0,16)}</td>
-        <td><button class="btn-sm" onclick="setRole(${u.id},'${u.role==='admin'?'user':'admin'}')">Make ${u.role==='admin'?'user':'admin'}</button></td>
-      </tr>`).join('');
+        <td>
+          ${u.is_active
+            ?`<button class="btn-sm danger" onclick="setUserActive(${u.id},false)">Deactivate</button>`
+            :`<button class="btn-sm" onclick="setUserActive(${u.id},true)">Reactivate</button>`}
+        </td>
+      </tr>`;
+    }).join('');
   }catch(e){}
 }
 
 async function setRole(id,role){
   await apiFetch('/users/'+id+'/role',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})});
+  loadUsers();
+}
+
+async function setUserActive(id,active){
+  const label=active?'reactivate':'deactivate';
+  if(!confirm('Are you sure you want to '+label+' this user?')) return;
+  await apiFetch('/users/'+id+'/'+(active?'reactivate':'deactivate'),{method:'PUT'});
   loadUsers();
 }
 

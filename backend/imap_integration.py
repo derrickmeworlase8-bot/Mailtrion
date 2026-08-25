@@ -35,6 +35,8 @@ def register_imap_routes(app, get_token, get_db, audit, TOKENS, perform_scan):
         token = get_token()
         if not token or token not in TOKENS:
             return jsonify({"error": "Authentication required"}), 401
+        if TOKENS[token].get("role") not in ("admin", "user"):
+            return jsonify({"error": "You don't have permission to connect a mailbox."}), 403
         user = TOKENS[token]
 
         data = request.get_json() or {}
@@ -100,6 +102,8 @@ def register_imap_routes(app, get_token, get_db, audit, TOKENS, perform_scan):
         token = get_token()
         if not token or token not in TOKENS:
             return jsonify({"error": "Authentication required"}), 401
+        if TOKENS[token].get("role") not in ("admin", "user"):
+            return jsonify({"error": "You don't have permission to disconnect a mailbox."}), 403
         user = TOKENS[token]
 
         conn = get_db()

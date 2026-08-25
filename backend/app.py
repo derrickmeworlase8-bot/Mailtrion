@@ -114,6 +114,20 @@ OTP_RESEND_COOLDOWN_SECONDS = 60
 OTP_RESEND_LAST_SENT = {}     # email -> datetime of last OTP send (cooldown)
 
 
+def password_strength_error(pw):
+    """Returns an error message string if the password doesn't meet the
+    requirements, or None if it's fine."""
+    if len(pw) < 8:
+        return "Password must be at least 8 characters"
+    if not re.search(r"[A-Z]", pw):
+        return "Password must include at least one uppercase letter"
+    if not re.search(r"[a-z]", pw):
+        return "Password must include at least one lowercase letter"
+    if not re.search(r"[^A-Za-z0-9]", pw):
+        return "Password must include at least one special character"
+    return None
+
+
 def _generate_and_send_otp(conn, user_row):
     """Generates a fresh OTP, stores it against the user, and emails it.
     Returns True if the email actually sent, False if it only logged
@@ -412,6 +426,24 @@ def admin_required(f):
             return jsonify({"error": "Administrator privileges required"}), 403
         return f(*args, **kwargs)
     return decorated
+
+
+def role_required(*allowed_roles):
+    """Like login_required, but also requires the user's role to be one of
+    allowed_roles. Use for actions a 'viewer' shouldn't be able to take
+    (scanning, releasing/deleting quarantine, connecting mailboxes) while
+    still letting them through login_required-only routes for read access."""
+    def wrapper(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            token = get_token()
+            if not token or token not in TOKENS:
+                return jsonify({"error": "Authentication required"}), 401
+            if TOKENS[token].get("role") not in allowed_roles:
+                return jsonify({"error": "You don't have permission to do that."}), 403
+            return f(*args, **kwargs)
+        return decorated
+    return wrapper
 
 
 def current_user():
@@ -828,8 +860,9 @@ def register():
 
     if not username or not em or not pw:
         return jsonify({"error":"All fields required"}), 400
-    if len(pw) < 8:
-        return jsonify({"error":"Password must be at least 8 characters"}), 400
+    pw_error = password_strength_error(pw)
+    if pw_error:
+        return jsonify({"error": pw_error}), 400
 
     conn = get_db()
     try:
@@ -906,8 +939,9 @@ def reset_password():
 
     if not em or not code or not new_pw:
         return jsonify({"error": "Email, code, and new password are all required"}), 400
-    if len(new_pw) < 8:
-        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    pw_error = password_strength_error(new_pw)
+    if pw_error:
+        return jsonify({"error": pw_error}), 400
 
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE email=?", (em,)).fetchone()
@@ -1210,7 +1244,7 @@ def perform_scan(body, sender, subject, auth, user_id, source="manual", gmail_me
 
 
 @app.route("/analyze-email", methods=["POST"])
-@login_required
+@role_required("admin","user")
 def analyze_email():
     u = current_user()
 
@@ -1319,7 +1353,7 @@ def _can_manage_scan(scan_row, user):
 
 
 @app.route("/quarantine/<scan_id>/release", methods=["POST"])
-@login_required
+@role_required("admin","user")
 def release_quarantine(scan_id):
     user = current_user()
     conn = get_db()
@@ -1341,7 +1375,7 @@ def release_quarantine(scan_id):
 
 
 @app.route("/quarantine/<scan_id>/delete", methods=["DELETE"])
-@login_required
+@role_required("admin","user")
 def delete_quarantine(scan_id):
     user = current_user()
     conn = get_db()
@@ -1408,7 +1442,7 @@ def get_quarantine_item(scan_id):
 @admin_required
 def list_users():
     conn  = get_db()
-    users = conn.execute("SELECT id,username,email,role,created_at,last_login,is_active FROM users").fetchall()
+    users = conn.execute("SELECT id,username,email,role,created_at,last_login,is_active,is_verified FROM users").fetchall()
     conn.close()
     return jsonify({"users":[dict(u) for u in users]})
 
@@ -1417,7 +1451,7 @@ def list_users():
 @admin_required
 def update_role(uid):
     role = (request.get_json() or {}).get("role","user")
-    if role not in ("admin","user"):
+    if role not in ("admin","user","viewer"):
         return jsonify({"error":"Invalid role"}),400
     conn = get_db()
     conn.execute("UPDATE users SET role=? WHERE id=?", (role,uid))
@@ -1436,6 +1470,17 @@ def deactivate_user(uid):
     audit(current_user()["id"], current_user()["username"],
           "USER_DEACTIVATE", f"uid={uid}")
     return jsonify({"message":"User deactivated"})
+
+
+@app.route("/users/<int:uid>/reactivate", methods=["PUT"])
+@admin_required
+def reactivate_user(uid):
+    conn = get_db()
+    conn.execute("UPDATE users SET is_active=1 WHERE id=?", (uid,))
+    conn.commit(); conn.close()
+    audit(current_user()["id"], current_user()["username"],
+          "USER_REACTIVATE", f"uid={uid}")
+    return jsonify({"message":"User reactivated"})
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AUDIT LOG
