@@ -97,7 +97,7 @@ def _find_or_create_social_user(conn, get_db, audit, email, display_name):
     conn.execute("""INSERT INTO users
         (username,email,password_hash,role,created_at,last_login,is_verified)
         VALUES (?,?,?,?,?,?,1)""",
-        (username, email, unusable_password, "user",
+        (username, email, unusable_password, "analyst",
          datetime.utcnow().isoformat(), datetime.utcnow().isoformat()))
     conn.commit()
     new_user = conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
