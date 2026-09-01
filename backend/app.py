@@ -1820,9 +1820,10 @@ if __name__ == "__main__":
 
     # --- Gmail ---
     client_secrets_path = os.environ.get("GOOGLE_CLIENT_SECRETS", DEFAULT_GOOGLE_CLIENT_SECRETS)
-    if not os.path.exists(client_secrets_path):
-        log.warning("client_secret.json not found — Gmail integration disabled. "
-                    "See SETUP_GMAIL.md to enable it.")
+    gmail_configured = os.path.exists(client_secrets_path) or bool(os.environ.get("GOOGLE_CLIENT_SECRETS_JSON"))
+    if not gmail_configured:
+        log.warning("client_secret.json not found (and GOOGLE_CLIENT_SECRETS_JSON not set) — "
+                    "Gmail integration disabled. See SETUP_GMAIL.md to enable it.")
         _GMAIL_NOT_CONFIGURED_MSG = (
             "Gmail integration is not set up on this server yet. "
             "See SETUP_GMAIL.md — you need a client_secret.json from "
@@ -1852,9 +1853,10 @@ if __name__ == "__main__":
 
     # --- Outlook / Microsoft 365 ---
     outlook_secrets_path = os.environ.get("OUTLOOK_SECRETS_FILE", DEFAULT_OUTLOOK_SECRETS_FILE)
-    if not os.path.exists(outlook_secrets_path):
-        log.warning("outlook_secret.json not found — Outlook integration disabled. "
-                    "See SETUP_OUTLOOK.md to enable it.")
+    outlook_configured = os.path.exists(outlook_secrets_path) or bool(os.environ.get("OUTLOOK_SECRETS_JSON"))
+    if not outlook_configured:
+        log.warning("outlook_secret.json not found (and OUTLOOK_SECRETS_JSON not set) — "
+                    "Outlook integration disabled. See SETUP_OUTLOOK.md to enable it.")
         _OUTLOOK_NOT_CONFIGURED_MSG = (
             "Outlook integration is not set up on this server yet. "
             "See SETUP_OUTLOOK.md — you need an outlook_secret.json from "
