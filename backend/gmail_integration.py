@@ -51,7 +51,7 @@ from flask import request, jsonify, redirect
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-from providers.gmail_provider import SCOPES, CLIENT_SECRETS_FILE
+from providers.gmail_provider import SCOPES, CLIENT_SECRETS_FILE, _load_client_config
 from crypto_utils import encrypt_value
 
 REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:5000/auth/gmail/callback")
@@ -63,8 +63,15 @@ _STATE_TO_PG_TOKEN = {}
 
 
 def _get_flow(state=None):
-    return Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE, scopes=SCOPES,
+    # Uses the same env-var-aware loader as gmail_provider.py — a hosted
+    # deployment (Render etc.) generally can't keep a file on disk across
+    # deploys, so GOOGLE_CLIENT_SECRETS_JSON is the real source of truth
+    # there. from_client_secrets_file() would only ever look at disk and
+    # silently ignore that env var, which is exactly what was happening
+    # here before this fix (a working /auth/gmail/status check, but a
+    # 500 the moment you actually tried to connect an account).
+    return Flow.from_client_config(
+        _load_client_config(), scopes=SCOPES,
         redirect_uri=REDIRECT_URI, state=state
     )
 
