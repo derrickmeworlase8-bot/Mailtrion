@@ -9,11 +9,12 @@ specific implementation of that logic). The background scheduler that
 drives polling is started once, centrally, in app.py — not here — since
 multiple providers share one poll cycle rather than each running its own.
 
-Design choice: polling (not Pub/Sub push) for Phase 1. Push requires a
-public HTTPS endpoint, a GCP Pub/Sub topic, and a watch() renewal every
-7 days — real infra overhead for a project at this stage. Polling every
-60-120s is functionally equivalent for a demo and far easier to run and
-debug locally. Swap in push later as a documented "v2" upgrade.
+Design choice: 90-second polling is the always-on baseline for every
+account (see poller.py) — simple, uniform across providers, and bounded
+latency. Pub/Sub push is available as an optional, additive layer on top
+of that baseline (see push_notifications.py) when GMAIL_PUBSUB_TOPIC is
+configured; polling keeps running underneath it either way as the
+reconciliation backstop. See SETUP_PUSH.md for enabling push.
 
 Setup required (see SETUP_GMAIL.md):
   1. Create a Google Cloud project, enable the Gmail API
@@ -24,7 +25,11 @@ Setup required (see SETUP_GMAIL.md):
 """
 
 import os
+import logging
 from datetime import datetime
+
+log = logging.getLogger(__name__)
+
 
 # Google's OAuth libraries refuse to complete a token exchange over plain
 # HTTP by default (they enforce HTTPS). This setup deliberately uses
@@ -47,6 +52,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from providers.gmail_provider import SCOPES, CLIENT_SECRETS_FILE
+from crypto_utils import encrypt_value
 
 REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:5000/auth/gmail/callback")
 
@@ -71,8 +77,6 @@ def register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan):
         token = request.args.get("token") or get_token()
         if not token or token not in TOKENS:
             return jsonify({"error": "Authentication required. Pass your Snarelytics token as ?token="}), 401
-        if TOKENS[token].get("role") not in ("admin", "user"):
-            return jsonify({"error": "You don't have permission to connect a mailbox."}), 403
 
         flow = _get_flow()
         auth_url, state = flow.authorization_url(
@@ -106,13 +110,30 @@ def register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan):
                 refresh_token=excluded.refresh_token,
                 token_expiry=excluded.token_expiry,
                 is_active=1""",
-            (user["id"], gmail_address, creds.token, creds.refresh_token,
+            (user["id"], gmail_address, encrypt_value(creds.token), encrypt_value(creds.refresh_token),
              creds.expiry.isoformat() if creds.expiry else None,
              datetime.utcnow().isoformat()))
         conn.commit()
         conn.close()
 
         audit(user["id"], user["username"], "GMAIL_CONNECTED", f"gmail={gmail_address}")
+
+        # If push notifications are configured, register the watch right
+        # away instead of waiting for tomorrow's renewal job — otherwise
+        # this account would sit on 90s-polling-only for up to 24h after
+        # connecting for no real reason.
+        if os.environ.get("GMAIL_PUBSUB_TOPIC"):
+            try:
+                from push_notifications import start_gmail_watch
+                conn2 = get_db()
+                account_row = conn2.execute(
+                    "SELECT * FROM gmail_accounts WHERE gmail_address=?", (gmail_address,)).fetchone()
+                conn2.close()
+                start_gmail_watch(dict(account_row), get_db)
+            except Exception as e:
+                log.warning(f"[gmail-push] initial watch registration failed for {gmail_address} "
+                            f"({e}) — 90s polling still covers this account")
+
         # Send the user back into the app UI instead of leaving them on a bare JSON page
         return redirect("/?gmail_connected=" + gmail_address)
 
@@ -134,8 +155,6 @@ def register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan):
         token = get_token()
         if not token or token not in TOKENS:
             return jsonify({"error": "Authentication required"}), 401
-        if TOKENS[token].get("role") not in ("admin", "user"):
-            return jsonify({"error": "You don't have permission to disconnect a mailbox."}), 403
         user = TOKENS[token]
 
         conn = get_db()

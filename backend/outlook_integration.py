@@ -16,11 +16,15 @@ Setup required (see SETUP_OUTLOOK.md):
 
 import os
 import requests
+import logging
 from datetime import datetime
 
 from flask import request, jsonify, redirect
 
 from providers.outlook_provider import build_msal_app, SCOPES, GRAPH_BASE
+from crypto_utils import encrypt_value
+
+log = logging.getLogger(__name__)
 
 REDIRECT_URI = os.environ.get("OUTLOOK_REDIRECT_URI", "http://localhost:5000/auth/outlook/callback")
 
@@ -36,8 +40,6 @@ def register_outlook_routes(app, get_token, get_db, audit, TOKENS, perform_scan)
         token = request.args.get("token") or get_token()
         if not token or token not in TOKENS:
             return jsonify({"error": "Authentication required. Pass your Snarelytics token as ?token="}), 401
-        if TOKENS[token].get("role") not in ("admin", "user"):
-            return jsonify({"error": "You don't have permission to connect a mailbox."}), 403
 
         msal_app = build_msal_app()
         # Mint our own state token to correlate the callback with the
@@ -89,12 +91,25 @@ def register_outlook_routes(app, get_token, get_db, audit, TOKENS, perform_scan)
                 access_token=excluded.access_token,
                 refresh_token=excluded.refresh_token,
                 is_active=1""",
-            (user["id"], email_address, access_token, refresh_token,
+            (user["id"], email_address, encrypt_value(access_token), encrypt_value(refresh_token),
              datetime.utcnow().isoformat()))
         conn.commit()
         conn.close()
 
         audit(user["id"], user["username"], "OUTLOOK_CONNECTED", f"outlook={email_address}")
+
+        if os.environ.get("OUTLOOK_WEBHOOK_ENABLED") == "1":
+            try:
+                from push_notifications import start_outlook_subscription
+                conn2 = get_db()
+                account_row = conn2.execute(
+                    "SELECT * FROM outlook_accounts WHERE email_address=?", (email_address,)).fetchone()
+                conn2.close()
+                start_outlook_subscription(dict(account_row), get_db)
+            except Exception as e:
+                log.warning(f"[outlook-push] initial subscription failed for {email_address} "
+                            f"({e}) — 90s polling still covers this account")
+
         return redirect("/?outlook_connected=" + email_address)
 
     @app.route("/auth/outlook/status", methods=["GET"])
@@ -115,8 +130,6 @@ def register_outlook_routes(app, get_token, get_db, audit, TOKENS, perform_scan)
         token = get_token()
         if not token or token not in TOKENS:
             return jsonify({"error": "Authentication required"}), 401
-        if TOKENS[token].get("role") not in ("admin", "user"):
-            return jsonify({"error": "You don't have permission to disconnect a mailbox."}), 403
         user = TOKENS[token]
 
         conn = get_db()

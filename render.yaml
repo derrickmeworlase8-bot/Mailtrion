@@ -10,6 +10,13 @@ services:
         value: 3.11.9
       - key: FLASK_SECRET_KEY
         generateValue: true
+      # Encrypts stored OAuth tokens and IMAP app passwords at rest.
+      # generateValue creates this once on first deploy and Render persists
+      # it — do NOT regenerate or edit it after accounts have connected, or
+      # every previously-stored credential becomes undecryptable and every
+      # connected mailbox breaks. See backend/crypto_utils.py.
+      - key: ENCRYPTION_KEY
+        generateValue: true
       # Sets the initial admin login on first deploy. If you leave this out,
       # the app generates a random password itself and prints it once to
       # the Render service logs — check Logs in the Render dashboard right
@@ -24,6 +31,18 @@ services:
       #   value: https://YOUR-RENDER-URL.onrender.com/auth/gmail/callback
       # - key: OUTLOOK_REDIRECT_URI
       #   value: https://YOUR-RENDER-URL.onrender.com/auth/outlook/callback
+      # Optional — push-based scanning (Tier 3 / "Approach B"). See
+      # SETUP_PUSH.md before uncommenting any of these; IMAP push (IDLE)
+      # needs none of this and is already on by default. 90s polling
+      # covers every account correctly whether or not these are set.
+      # - key: GMAIL_PUBSUB_TOPIC
+      #   value: projects/YOUR-PROJECT-ID/topics/snarelytics-gmail-push
+      # - key: OUTLOOK_WEBHOOK_ENABLED
+      #   value: "1"
+      # - key: PUBLIC_BASE_URL
+      #   value: https://YOUR-RENDER-URL.onrender.com
+      # - key: IMAP_IDLE_ENABLED
+      #   value: "1"
       # Optional — needed for new users to receive their OTP verification
       # email on registration. Works with a Gmail account + App Password,
       # an Outlook account, or any SMTP-based transactional email provider.

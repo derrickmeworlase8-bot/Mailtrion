@@ -20,6 +20,7 @@ from googleapiclient.discovery import build
 
 from .base import EmailProvider
 from paths import DEFAULT_GOOGLE_CLIENT_SECRETS
+from crypto_utils import encrypt_value, decrypt_value
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -73,8 +74,8 @@ class GmailProvider(EmailProvider):
 
     def _credentials(self):
         return Credentials(
-            token=self.account["access_token"],
-            refresh_token=self.account["refresh_token"],
+            token=decrypt_value(self.account["access_token"]),
+            refresh_token=decrypt_value(self.account["refresh_token"]),
             token_uri="https://oauth2.googleapis.com/token",
             client_id=_client_id(),
             client_secret=_client_secret(),
@@ -88,7 +89,7 @@ class GmailProvider(EmailProvider):
             conn = self.get_db()
             conn.execute(
                 "UPDATE gmail_accounts SET access_token=?, token_expiry=? WHERE id=?",
-                (creds.token, creds.expiry.isoformat() if creds.expiry else None, self.account["id"]),
+                (encrypt_value(creds.token), creds.expiry.isoformat() if creds.expiry else None, self.account["id"]),
             )
             conn.commit()
             conn.close()

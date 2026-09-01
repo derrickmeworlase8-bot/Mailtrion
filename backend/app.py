@@ -37,6 +37,8 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 import mailer
+from crypto_utils import encrypt_value, decrypt_value, looks_encrypted
+import relational_signal
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
@@ -112,20 +114,6 @@ OTP_EXPIRY_MINUTES = 10
 OTP_MAX_VERIFY_ATTEMPTS = 5   # wrong-code guesses allowed before requiring a resend
 OTP_RESEND_COOLDOWN_SECONDS = 60
 OTP_RESEND_LAST_SENT = {}     # email -> datetime of last OTP send (cooldown)
-
-
-def password_strength_error(pw):
-    """Returns an error message string if the password doesn't meet the
-    requirements, or None if it's fine."""
-    if len(pw) < 8:
-        return "Password must be at least 8 characters"
-    if not re.search(r"[A-Z]", pw):
-        return "Password must include at least one uppercase letter"
-    if not re.search(r"[a-z]", pw):
-        return "Password must include at least one lowercase letter"
-    if not re.search(r"[^A-Za-z0-9]", pw):
-        return "Password must include at least one special character"
-    return None
 
 
 def _generate_and_send_otp(conn, user_row):
@@ -297,6 +285,21 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         )""")
 
+    # Sender-receiver relational signal — see relational_signal.py. Scoped
+    # per-organization so one institution's sender history never leaks
+    # into another's risk scoring.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sender_reputation (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            organization    TEXT NOT NULL,
+            sender_domain   TEXT NOT NULL,
+            total_seen      INTEGER DEFAULT 0,
+            phishing_count  INTEGER DEFAULT 0,
+            first_seen      TEXT,
+            last_seen       TEXT,
+            UNIQUE(organization, sender_domain)
+        )""")
+
     conn.commit()
 
     # ── Lightweight migration for existing DBs (adds columns if missing) ──────
@@ -313,6 +316,19 @@ def init_db():
     if "account_id" not in existing_cols:
         c.execute("ALTER TABLE scans ADD COLUMN account_id INTEGER")
         log.info("Migration: added scans.account_id")
+    # Analyst feedback loop — lets an analyst mark a flagged email as a
+    # false positive, so the correction is captured (for future retraining
+    # and for showing reviewers the system improves from real usage)
+    # instead of only ever being silently released from quarantine.
+    if "analyst_feedback" not in existing_cols:
+        c.execute("ALTER TABLE scans ADD COLUMN analyst_feedback TEXT")
+        log.info("Migration: added scans.analyst_feedback")
+    if "feedback_by" not in existing_cols:
+        c.execute("ALTER TABLE scans ADD COLUMN feedback_by TEXT")
+        log.info("Migration: added scans.feedback_by")
+    if "feedback_at" not in existing_cols:
+        c.execute("ALTER TABLE scans ADD COLUMN feedback_at TEXT")
+        log.info("Migration: added scans.feedback_at")
     conn.commit()
 
     # ── Migration: email verification (OTP) columns on users ──────────────────
@@ -340,7 +356,52 @@ def init_db():
     if "reset_attempts" not in existing_user_cols:
         c.execute("ALTER TABLE users ADD COLUMN reset_attempts INTEGER DEFAULT 0")
         log.info("Migration: added users.reset_attempts")
+    # Institution/organization — the field that makes the admin view a real
+    # multi-tenant oversight tool (per-institution activity) rather than one
+    # flat user list. Free-text rather than a separate table for now: simple,
+    # and good enough at "hundreds to low thousands of accounts, a handful
+    # of institutions" scale.
+    if "organization" not in existing_user_cols:
+        c.execute("ALTER TABLE users ADD COLUMN organization TEXT DEFAULT 'Unassigned'")
+        log.info("Migration: added users.organization")
     conn.commit()
+
+    # ── Migration: push-notification columns (Tier 3, optional) ────────────────
+    existing_gmail_cols = {row[1] for row in c.execute("PRAGMA table_info(gmail_accounts)").fetchall()}
+    if "history_id" not in existing_gmail_cols:
+        c.execute("ALTER TABLE gmail_accounts ADD COLUMN history_id TEXT")
+        log.info("Migration: added gmail_accounts.history_id")
+    if "watch_expiration" not in existing_gmail_cols:
+        c.execute("ALTER TABLE gmail_accounts ADD COLUMN watch_expiration TEXT")
+        log.info("Migration: added gmail_accounts.watch_expiration")
+
+    existing_outlook_cols = {row[1] for row in c.execute("PRAGMA table_info(outlook_accounts)").fetchall()}
+    if "subscription_id" not in existing_outlook_cols:
+        c.execute("ALTER TABLE outlook_accounts ADD COLUMN subscription_id TEXT")
+        log.info("Migration: added outlook_accounts.subscription_id")
+    if "subscription_expires" not in existing_outlook_cols:
+        c.execute("ALTER TABLE outlook_accounts ADD COLUMN subscription_expires TEXT")
+        log.info("Migration: added outlook_accounts.subscription_expires")
+    if "webhook_client_state" not in existing_outlook_cols:
+        c.execute("ALTER TABLE outlook_accounts ADD COLUMN webhook_client_state TEXT")
+        log.info("Migration: added outlook_accounts.webhook_client_state")
+    conn.commit()
+
+    # ── Migration: role rename 'user' -> 'analyst' ─────────────────────────────
+    # Two roles only, per the reviewer's requested change: Admin and Analyst.
+    # Existing rows created before this rename still say 'user' — bring them
+    # forward every startup (idempotent; a no-op once nothing matches).
+    renamed = c.execute("UPDATE users SET role='analyst' WHERE role='user'").rowcount
+    conn.commit()
+    if renamed:
+        log.info(f"Migration: renamed role 'user' -> 'analyst' for {renamed} account(s)")
+
+    # ── Migration: encrypt any legacy plaintext credentials ───────────────────
+    # Rows written before encryption-at-rest was added are still plaintext.
+    # Sweep them once at startup: anything that isn't valid Fernet ciphertext
+    # gets encrypted in place. Safe to run every boot — already-encrypted
+    # rows are left untouched.
+    _migrate_credential_encryption(conn, c)
 
     # Create default admin if no users
     c.execute("SELECT COUNT(*) FROM users")
@@ -377,6 +438,33 @@ def init_db():
 
     conn.close()
     log.info("Database initialised")
+
+
+def _migrate_credential_encryption(conn, c):
+    """One-time (per legacy row) sweep: encrypts any OAuth token or IMAP
+    app password that's still sitting in the database as plaintext,
+    because it was written before encryption-at-rest was added. Safe to
+    call on every startup — already-encrypted rows are left untouched."""
+    creds_to_check = [
+        ("gmail_accounts",   ["access_token", "refresh_token"]),
+        ("outlook_accounts", ["access_token", "refresh_token"]),
+        ("imap_accounts",    ["app_password"]),
+    ]
+    for table, columns in creds_to_check:
+        rows = c.execute(f"SELECT id, {', '.join(columns)} FROM {table}").fetchall()
+        for row in rows:
+            row_id = row[0]
+            updates = {}
+            for i, col in enumerate(columns, start=1):
+                value = row[i]
+                if value is not None and not looks_encrypted(value):
+                    updates[col] = encrypt_value(value)
+            if updates:
+                set_clause = ", ".join(f"{col}=?" for col in updates)
+                c.execute(f"UPDATE {table} SET {set_clause} WHERE id=?",
+                          (*updates.values(), row_id))
+                log.info(f"Migration: encrypted legacy plaintext credential(s) in {table} id={row_id}")
+    conn.commit()
 
 
 def get_db():
@@ -428,29 +516,11 @@ def admin_required(f):
     return decorated
 
 
-def role_required(*allowed_roles):
-    """Like login_required, but also requires the user's role to be one of
-    allowed_roles. Use for actions a 'viewer' shouldn't be able to take
-    (scanning, releasing/deleting quarantine, connecting mailboxes) while
-    still letting them through login_required-only routes for read access."""
-    def wrapper(f):
-        @wraps(f)
-        def decorated(*args, **kwargs):
-            token = get_token()
-            if not token or token not in TOKENS:
-                return jsonify({"error": "Authentication required"}), 401
-            if TOKENS[token].get("role") not in allowed_roles:
-                return jsonify({"error": "You don't have permission to do that."}), 403
-            return f(*args, **kwargs)
-        return decorated
-    return wrapper
-
-
 def current_user():
     token = get_token()
     if token and token in TOKENS:
         return TOKENS[token]
-    return {"id": None, "username": "unknown", "role": "user"}
+    return {"id": None, "username": "unknown", "role": "analyst"}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PHISHING KNOWLEDGE
@@ -856,19 +926,22 @@ def register():
     username = (d.get("username","")).strip()
     em       = (d.get("email","")).strip().lower()
     pw       = d.get("password","")
-    role     = "user"
+    role     = "analyst"
+    # Optional at signup — an institution can also assign/correct this later
+    # from the admin Users panel. Falls back to the same 'Unassigned' default
+    # new columns get, so grouping in the admin view never breaks on a blank.
+    organization = (d.get("organization","") or "").strip() or "Unassigned"
 
     if not username or not em or not pw:
         return jsonify({"error":"All fields required"}), 400
-    pw_error = password_strength_error(pw)
-    if pw_error:
-        return jsonify({"error": pw_error}), 400
+    if len(pw) < 8:
+        return jsonify({"error":"Password must be at least 8 characters"}), 400
 
     conn = get_db()
     try:
-        conn.execute("""INSERT INTO users (username,email,password_hash,role,created_at,is_verified)
-            VALUES (?,?,?,?,?,0)""",
-            (username, em, generate_password_hash(pw), role,
+        conn.execute("""INSERT INTO users (username,email,password_hash,role,organization,created_at,is_verified)
+            VALUES (?,?,?,?,?,?,0)""",
+            (username, em, generate_password_hash(pw), role, organization,
              datetime.utcnow().isoformat()))
         conn.commit()
         audit(None, username, "REGISTER", f"New user registered: {em}")
@@ -939,9 +1012,8 @@ def reset_password():
 
     if not em or not code or not new_pw:
         return jsonify({"error": "Email, code, and new password are all required"}), 400
-    pw_error = password_strength_error(new_pw)
-    if pw_error:
-        return jsonify({"error": pw_error}), 400
+    if len(new_pw) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
 
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE email=?", (em,)).fetchone()
@@ -1105,7 +1177,8 @@ def login():
     TOKENS[token] = {
         "id":       user["id"],
         "username": user["username"],
-        "role":     user["role"]
+        "role":     user["role"],
+        "organization": user["organization"]
     }
 
     conn = get_db()
@@ -1118,7 +1191,8 @@ def login():
         "message": "Login successful",
         "token":   token,
         "user":    {"id":user["id"],"username":user["username"],
-                    "email":user["email"],"role":user["role"]}
+                    "email":user["email"],"role":user["role"],
+                    "organization":user["organization"]}
     })
 
 
@@ -1179,13 +1253,32 @@ def perform_scan(body, sender, subject, auth, user_id, source="manual", gmail_me
     X         = VECTORIZER.transform([processed])
     proba     = float(MODEL.predict_proba(X)[0][1])
 
+    # Organization-scoped relational signal — see relational_signal.py.
+    # Looked up once here so both scoring and the post-scan observation
+    # write below use the exact same sender_domain/organization pair.
+    conn = get_db()
+    urow_for_org = conn.execute("SELECT organization FROM users WHERE id=?", (user_id,)).fetchone()
+    conn.close()
+    organization = urow_for_org["organization"] if urow_for_org else "Unassigned"
+    sender_domain = relational_signal.extract_domain(sender)
+
+    conn = get_db()
+    sender_context = relational_signal.get_sender_context(conn, organization, sender_domain)
+    conn.close()
+    relational_delta, relational_factor = relational_signal.relational_risk_adjustment(sender_context)
+
     risk_score          = compute_risk(proba, features, auth)
+    risk_score           = max(0, min(100, risk_score + relational_delta))
     verdict, risk_level  = score_to_verdict(risk_score)
     confidence           = round(max(proba, 1-proba)*100, 1)
 
     phish_kws  = [k for k in PHISHING_KWS if k in f"{subject} {sender} {body}".lower()][:8]
     safe_sigs  = [s for s in SAFE_SIGNALS  if s in body.lower()]
     factors    = get_factors(features, auth)
+    if relational_factor:
+        factors.append(relational_factor)
+        factors.sort(key=lambda x:(0 if x["impact"]=="negative" else 1,-x["weight"]))
+        factors = factors[:6]
     explanation= explain(verdict, risk_score, factors, phish_kws, susp_urls, auth)
 
     is_quarantined = 1 if verdict == "Phishing" else 0
@@ -1213,6 +1306,10 @@ def perform_scan(body, sender, subject, auth, user_id, source="manual", gmail_me
          explanation, is_quarantined,
          datetime.utcnow().isoformat(),
          source, gmail_message_id, provider, account_id))
+    conn.commit(); conn.close()
+
+    conn = get_db()
+    relational_signal.record_observation(conn, organization, sender_domain, is_phishing=(verdict == "Phishing"))
     conn.commit(); conn.close()
 
     conn = get_db()
@@ -1244,7 +1341,7 @@ def perform_scan(body, sender, subject, auth, user_id, source="manual", gmail_me
 
 
 @app.route("/analyze-email", methods=["POST"])
-@role_required("admin","user")
+@login_required
 def analyze_email():
     u = current_user()
 
@@ -1332,28 +1429,45 @@ def retrain():
 @app.route("/quarantine", methods=["GET"])
 @login_required
 def list_quarantine():
+    user = current_user()
     conn = get_db()
-    rows = conn.execute("""
-        SELECT s.*, u.username FROM scans s
-        LEFT JOIN users u ON s.user_id=u.id
-        WHERE s.is_quarantined=1 AND s.released=0
-        ORDER BY s.created_at DESC""").fetchall()
-    conn.close()
+    if user.get("role") == "admin":
+        # Admins see everything, across every connected account — this is
+        # the real-time institutional oversight view. Logged once per
+        # listing call, not per row, so the audit trail stays proportional
+        # to actual admin activity rather than flooding on every page load.
+        rows = conn.execute("""
+            SELECT s.*, u.username, u.organization FROM scans s
+            LEFT JOIN users u ON s.user_id=u.id
+            WHERE s.is_quarantined=1 AND s.released=0
+            ORDER BY s.created_at DESC""").fetchall()
+        conn.close()
+        audit(user["id"], user["username"], "ADMIN_VIEW_ALL_QUARANTINE",
+              f"viewed {len(rows)} quarantined item(s) across all accounts")
+    else:
+        # Analysts only ever see their own connected account's flagged
+        # mail — never another analyst's, admin or not.
+        rows = conn.execute("""
+            SELECT s.*, u.username, u.organization FROM scans s
+            LEFT JOIN users u ON s.user_id=u.id
+            WHERE s.is_quarantined=1 AND s.released=0 AND s.user_id=?
+            ORDER BY s.created_at DESC""", (user["id"],)).fetchall()
+        conn.close()
     return jsonify({"quarantined":[dict(r) for r in rows]})
 
 
 def _can_manage_scan(scan_row, user):
     """
-    An admin can manage any quarantined item. A Standard User can only
-    manage their own — this is what lets an individual manage their own
-    inbox's quarantine without needing admin rights, while still keeping
-    other people's items off-limits to non-admins in a shared deployment.
+    An admin can manage any quarantined item. An Analyst can only manage
+    their own — this is what lets an individual manage their own inbox's
+    quarantine without needing admin rights, while still keeping other
+    analysts' items off-limits to non-admins in a shared deployment.
     """
     return user.get("role") == "admin" or scan_row["user_id"] == user["id"]
 
 
 @app.route("/quarantine/<scan_id>/release", methods=["POST"])
-@role_required("admin","user")
+@login_required
 def release_quarantine(scan_id):
     user = current_user()
     conn = get_db()
@@ -1374,8 +1488,43 @@ def release_quarantine(scan_id):
     return jsonify({"message":"Email released from quarantine"})
 
 
+@app.route("/quarantine/<scan_id>/feedback", methods=["POST"])
+@login_required
+def submit_feedback(scan_id):
+    """
+    Lets an analyst mark a flagged email as a false positive (or confirm
+    it as a true positive), independent of releasing/deleting it. This is
+    the correction signal that would feed a future retraining pass — right
+    now it's captured and visible, not yet wired into automatic retraining.
+    Kept separate from release/delete so feedback and quarantine actions
+    can happen independently (e.g. leave something quarantined but still
+    flag it as a wrong call for the record).
+    """
+    user = current_user()
+    verdict = (request.get_json() or {}).get("verdict", "")
+    if verdict not in ("false_positive", "true_positive"):
+        return jsonify({"error": "verdict must be 'false_positive' or 'true_positive'"}), 400
+
+    conn = get_db()
+    row = conn.execute("SELECT * FROM scans WHERE scan_id=?", (scan_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "Not found"}), 404
+    if not _can_manage_scan(row, user):
+        conn.close()
+        return jsonify({"error": "You can only give feedback on your own scans"}), 403
+
+    conn.execute(
+        "UPDATE scans SET analyst_feedback=?, feedback_by=?, feedback_at=? WHERE scan_id=?",
+        (verdict, user["username"], datetime.utcnow().isoformat(), scan_id))
+    conn.commit(); conn.close()
+    audit(user["id"], user["username"], "SCAN_FEEDBACK",
+          f"scan_id={scan_id} verdict={verdict}")
+    return jsonify({"message": "Feedback recorded"})
+
+
 @app.route("/quarantine/<scan_id>/delete", methods=["DELETE"])
-@role_required("admin","user")
+@login_required
 def delete_quarantine(scan_id):
     user = current_user()
     conn = get_db()
@@ -1428,10 +1577,20 @@ def delete_quarantine(scan_id):
 @app.route("/quarantine/<scan_id>", methods=["GET"])
 @login_required
 def get_quarantine_item(scan_id):
+    user = current_user()
     conn = get_db()
     row  = conn.execute("SELECT * FROM scans WHERE scan_id=?", (scan_id,)).fetchone()
     conn.close()
     if not row: return jsonify({"error":"Not found"}),404
+    if not _can_manage_scan(row, user):
+        return jsonify({"error": "You can only view scan items from your own connected accounts"}), 403
+    # An admin opening a specific item that belongs to someone else is
+    # exactly the "admin sees analyst activity" case the audit trail exists
+    # for — log it. Viewing your own item (analyst or admin) isn't logged
+    # here to keep the trail focused on cross-account visibility.
+    if user.get("role") == "admin" and row["user_id"] != user["id"]:
+        audit(user["id"], user["username"], "ADMIN_VIEW_ANALYST_ITEM",
+              f"scan_id={scan_id} owner_user_id={row['user_id']}")
     return jsonify(dict(row))
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1442,16 +1601,47 @@ def get_quarantine_item(scan_id):
 @admin_required
 def list_users():
     conn  = get_db()
-    users = conn.execute("SELECT id,username,email,role,created_at,last_login,is_active,is_verified FROM users").fetchall()
+    users = conn.execute(
+        "SELECT id,username,email,role,organization,created_at,last_login,is_active FROM users").fetchall()
     conn.close()
     return jsonify({"users":[dict(u) for u in users]})
+
+
+@app.route("/organizations/summary", methods=["GET"])
+@admin_required
+def organizations_summary():
+    """
+    Per-institution rollup for the admin dashboard — the actual multi-
+    tenant oversight view: how many analysts and connected mail accounts
+    each institution has, and how many threats have been caught for them,
+    instead of one flat account list with no institutional grouping.
+    """
+    conn = get_db()
+    orgs = conn.execute("""
+        SELECT u.organization AS organization,
+               COUNT(DISTINCT u.id) AS analyst_count,
+               COUNT(DISTINCT g.id) AS gmail_accounts,
+               COUNT(DISTINCT o.id) AS outlook_accounts,
+               COUNT(DISTINCT i.id) AS imap_accounts,
+               COUNT(DISTINCT CASE WHEN s.is_phishing_int=1 THEN s.id END) AS threats_caught
+        FROM users u
+        LEFT JOIN gmail_accounts   g ON g.user_id=u.id AND g.is_active=1
+        LEFT JOIN outlook_accounts o ON o.user_id=u.id AND o.is_active=1
+        LEFT JOIN imap_accounts    i ON i.user_id=u.id AND i.is_active=1
+        LEFT JOIN (SELECT id, user_id, CASE WHEN verdict='Phishing' THEN 1 ELSE 0 END AS is_phishing_int
+                    FROM scans) s ON s.user_id=u.id
+        GROUP BY u.organization
+        ORDER BY analyst_count DESC
+    """).fetchall()
+    conn.close()
+    return jsonify({"organizations": [dict(r) for r in orgs]})
 
 
 @app.route("/users/<int:uid>/role", methods=["PUT"])
 @admin_required
 def update_role(uid):
-    role = (request.get_json() or {}).get("role","user")
-    if role not in ("admin","user","viewer"):
+    role = (request.get_json() or {}).get("role","analyst")
+    if role not in ("admin","analyst"):
         return jsonify({"error":"Invalid role"}),400
     conn = get_db()
     conn.execute("UPDATE users SET role=? WHERE id=?", (role,uid))
@@ -1470,17 +1660,6 @@ def deactivate_user(uid):
     audit(current_user()["id"], current_user()["username"],
           "USER_DEACTIVATE", f"uid={uid}")
     return jsonify({"message":"User deactivated"})
-
-
-@app.route("/users/<int:uid>/reactivate", methods=["PUT"])
-@admin_required
-def reactivate_user(uid):
-    conn = get_db()
-    conn.execute("UPDATE users SET is_active=1 WHERE id=?", (uid,))
-    conn.commit(); conn.close()
-    audit(current_user()["id"], current_user()["username"],
-          "USER_REACTIVATE", f"uid={uid}")
-    return jsonify({"message":"User reactivated"})
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AUDIT LOG
@@ -1740,6 +1919,50 @@ if __name__ == "__main__":
         scheduler.add_job(_poll_tick, "interval", seconds=POLL_INTERVAL_SECONDS, id="mail_poll")
         scheduler.start()
         log.info(f"Mail polling active every {POLL_INTERVAL_SECONDS}s")
+
+        # ── IMAP IDLE (push-based detection, Approach B) ────────────────────
+        # Opt-out via IMAP_IDLE_ENABLED=0 if you'd rather run polling-only —
+        # e.g. very low free-tier RAM where extra persistent connections per
+        # mailbox are a real constraint. Off by default costs nothing: the
+        # 90s poller above is unconditional and fully covers every IMAP
+        # account on its own either way.
+        if os.environ.get("IMAP_IDLE_ENABLED", "1") == "1":
+            try:
+                import idle_watcher
+                idle_watcher.start_all_watchers(get_db, perform_scan, parse_auth_results)
+                log.info("IMAP IDLE watchers started (push-based detection for IMAP accounts)")
+            except Exception as e:
+                log.warning(f"IMAP IDLE watchers failed to start ({e}) — "
+                             f"90s polling still covers IMAP accounts normally")
+
+        # ── Gmail Pub/Sub + Microsoft Graph push notifications ──────────────
+        # Both need a real, publicly reachable HTTPS URL for the provider to
+        # call back into (a webhook), plus provider-side setup only the
+        # deploying institution can do (a GCP Pub/Sub topic; an Azure app
+        # registration) — see SETUP_PUSH.md. Feature-flagged and entirely
+        # optional: unset, both stay silent and the 90s poller alone
+        # continues covering Gmail and Outlook accounts, exactly as before.
+        if os.environ.get("GMAIL_PUBSUB_TOPIC"):
+            try:
+                from push_notifications import register_push_routes, renew_gmail_watches_job
+                register_push_routes(app, get_db, perform_scan, parse_auth_results, audit)
+                scheduler.add_job(renew_gmail_watches_job, "interval", hours=24,
+                                   id="gmail_watch_renewal", args=[get_db])
+                log.info("Gmail push notifications enabled (Pub/Sub)")
+            except Exception as e:
+                log.warning(f"Gmail push notifications failed to start ({e}) — "
+                             f"falling back to 90s polling only for Gmail")
+
+        if os.environ.get("OUTLOOK_WEBHOOK_ENABLED") == "1":
+            try:
+                from push_notifications import register_outlook_push_routes, renew_outlook_subscriptions_job
+                register_outlook_push_routes(app, get_db, perform_scan, parse_auth_results, audit)
+                scheduler.add_job(renew_outlook_subscriptions_job, "interval", hours=12,
+                                   id="outlook_subscription_renewal", args=[get_db])
+                log.info("Outlook push notifications enabled (Graph change notifications)")
+            except Exception as e:
+                log.warning(f"Outlook push notifications failed to start ({e}) — "
+                             f"falling back to 90s polling only for Outlook")
 
     # ── Host/port binding ────────────────────────────────────────────────────
     # Local desktop use (the .exe / Electron build) and a hosted deployment

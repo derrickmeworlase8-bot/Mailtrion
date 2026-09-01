@@ -25,6 +25,7 @@ import email
 from email.header import decode_header
 
 from .base import EmailProvider
+from crypto_utils import decrypt_value
 
 # Folder-name defaults for well-known IMAP hosts. IMAP doesn't standardize
 # folder names, so different providers call their Spam/Junk folder
@@ -52,7 +53,7 @@ class IMAPProvider(EmailProvider):
         # been revoked on the provider's side, this will raise cleanly and
         # the shared poller's per-account try/except will log it and move on.
         self._conn = imaplib.IMAP4_SSL(self.account["imap_host"], self.account["imap_port"])
-        self._conn.login(self.account["username"], self.account["app_password"])
+        self._conn.login(self.account["username"], decrypt_value(self.account["app_password"]))
         self._ensure_quarantine_folder()
 
     def _ensure_quarantine_folder(self):

@@ -25,6 +25,7 @@ import msal
 
 from .base import EmailProvider
 from paths import DEFAULT_OUTLOOK_SECRETS_FILE
+from crypto_utils import encrypt_value, decrypt_value
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 SCOPES = ["Mail.ReadWrite", "User.Read"]  # offline_access is implicit for MSAL confidential clients
@@ -92,8 +93,9 @@ class OutlookProvider(EmailProvider):
 
     def ensure_fresh_credentials(self):
         app_ = build_msal_app()
+        stored_refresh = decrypt_value(self.account["refresh_token"])
         result = app_.acquire_token_by_refresh_token(
-            self.account["refresh_token"], scopes=SCOPES
+            stored_refresh, scopes=SCOPES
         )
         if "access_token" not in result:
             raise RuntimeError(
@@ -103,11 +105,11 @@ class OutlookProvider(EmailProvider):
 
         # MSAL issues a new refresh token on every refresh in most cases —
         # persist it, or the next poll cycle would fail with a stale one.
-        new_refresh = result.get("refresh_token", self.account["refresh_token"])
+        new_refresh = result.get("refresh_token", stored_refresh)
         conn = self.get_db()
         conn.execute(
             "UPDATE outlook_accounts SET access_token=?, refresh_token=? WHERE id=?",
-            (self._access_token, new_refresh, self.account["id"]),
+            (encrypt_value(self._access_token), encrypt_value(new_refresh), self.account["id"]),
         )
         conn.commit()
         conn.close()
