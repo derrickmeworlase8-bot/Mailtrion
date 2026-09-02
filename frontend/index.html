@@ -1306,8 +1306,23 @@ async function connectProvider(provider){
     alert('Could not reach the server to check '+cfg.label+' setup status.');
     return;
   }
+  // Mint a short-lived, single-use connect code rather than putting the
+  // real session token directly in the URL we're about to navigate to —
+  // tokens in URLs land in browser history and server logs, and this
+  // exact shape of URL is also what automated phishing heuristics are
+  // trained to flag (which is exactly what was happening here before).
+  let connectCode;
+  try{
+    const codeResp = await apiFetch('/auth/connect-code', {method:'POST'});
+    if(!codeResp.ok){ alert('Could not start the connection — please try again.'); return; }
+    const codeData = await codeResp.json();
+    connectCode = codeData.code;
+  }catch(e){
+    alert('Could not reach the server to start the connection.');
+    return;
+  }
   // Full navigation (not fetch) — this hands off to the provider's own consent screen
-  window.location.href=API+'/auth/'+provider+'/connect?token='+encodeURIComponent(AUTH_TOKEN);
+  window.location.href=API+'/auth/'+provider+'/connect?code='+encodeURIComponent(connectCode);
 }
 
 async function disconnectProvider(provider,accountId){

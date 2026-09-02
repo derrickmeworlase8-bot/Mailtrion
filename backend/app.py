@@ -98,6 +98,33 @@ app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024
 # In-memory token store (maps token -> user info)
 TOKENS = {}
 
+# ── Short-lived, single-use "connect codes" ─────────────────────────────────
+# Used only for the initial redirect into an OAuth connect flow (Gmail/
+# Outlook mailbox connect). Putting the real session bearer token directly
+# in a URL (?token=...) is a real anti-pattern — it lands in browser
+# history, server access logs, and can leak via Referer headers — and it's
+# also exactly the shape of URL automated phishing heuristics are trained
+# to flag. A code is opaque, expires in 60 seconds, and is consumed on
+# first use, so even if it leaked somewhere it's useless a moment later.
+CONNECT_CODES = {}
+CONNECT_CODE_TTL_SECONDS = 60
+
+def mint_connect_code(bearer_token):
+    code = secrets.token_urlsafe(24)
+    CONNECT_CODES[code] = (bearer_token, datetime.utcnow() + timedelta(seconds=CONNECT_CODE_TTL_SECONDS))
+    return code
+
+def resolve_connect_code(code):
+    """Consumes a connect code and returns the real bearer token, or None
+    if the code is missing/expired/already used."""
+    entry = CONNECT_CODES.pop(code, None)
+    if not entry:
+        return None
+    bearer_token, expires_at = entry
+    if datetime.utcnow() > expires_at:
+        return None
+    return bearer_token
+
 # In-memory login-attempt tracker for brute-force throttling (see /auth/login).
 # Fast repeated guessing (LOGIN_MAX_ATTEMPTS within LOGIN_WINDOW_SECONDS)
 # triggers a much longer LOGIN_LOCKOUT_SECONDS lockout — short window to
@@ -1218,6 +1245,21 @@ def me():
         "user": {"id":u["id"],"username":u["username"],"role":u["role"]}
     })
 
+
+@app.route("/auth/connect-code", methods=["POST"])
+@login_required
+def create_connect_code():
+    """
+    Mints a short-lived, single-use code for kicking off a Gmail/Outlook
+    connect flow, so the real session bearer token never has to appear in
+    a URL. Call this with the normal Authorization header, then redirect
+    the browser to /auth/<provider>/connect?code=<code> instead of putting
+    ?token=<real token> in the URL directly.
+    """
+    token = get_token()
+    code = mint_connect_code(token)
+    return jsonify({"code": code, "expires_in": CONNECT_CODE_TTL_SECONDS})
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CORE ANALYSIS ROUTES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1844,7 +1886,7 @@ if __name__ == "__main__":
     else:
         try:
             from gmail_integration import register_gmail_routes
-            register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan)
+            register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan, resolve_connect_code)
             log.info("Gmail integration enabled")
             any_provider_configured = True
         except ImportError as e:
@@ -1877,7 +1919,7 @@ if __name__ == "__main__":
     else:
         try:
             from outlook_integration import register_outlook_routes
-            register_outlook_routes(app, get_token, get_db, audit, TOKENS, perform_scan)
+            register_outlook_routes(app, get_token, get_db, audit, TOKENS, perform_scan, resolve_connect_code)
             log.info("Outlook integration enabled")
             any_provider_configured = True
         except ImportError as e:

@@ -32,12 +32,20 @@ REDIRECT_URI = os.environ.get("OUTLOOK_REDIRECT_URI", "http://localhost:5000/aut
 _STATE_TO_PG_TOKEN = {}
 
 
-def register_outlook_routes(app, get_token, get_db, audit, TOKENS, perform_scan):
+def register_outlook_routes(app, get_token, get_db, audit, TOKENS, perform_scan, resolve_connect_code):
     """Call this once from app.py after the Flask app is created."""
 
     @app.route("/auth/outlook/connect", methods=["GET"])
     def outlook_connect():
-        token = request.args.get("token") or get_token()
+        # Prefer a one-time connect code (see /auth/connect-code) — see
+        # gmail_integration.py's identical comment for why this matters.
+        code = request.args.get("code")
+        if code:
+            token = resolve_connect_code(code)
+            if not token:
+                return jsonify({"error": "This connect link has expired. Please try connecting again."}), 400
+        else:
+            token = request.args.get("token") or get_token()
         if not token or token not in TOKENS:
             return jsonify({"error": "Authentication required. Pass your Snarelytics token as ?token="}), 401
 

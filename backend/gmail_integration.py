@@ -76,12 +76,23 @@ def _get_flow(state=None):
     )
 
 
-def register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan):
+def register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan, resolve_connect_code):
     """Call this once from app.py after the Flask app is created."""
 
     @app.route("/auth/gmail/connect", methods=["GET"])
     def gmail_connect():
-        token = request.args.get("token") or get_token()
+        # Prefer a one-time connect code (see /auth/connect-code) — it
+        # never exposes the real session token in the URL. Falling back to
+        # ?token= / a Bearer header keeps this endpoint usable for direct
+        # testing (e.g. curl), but the frontend should always use the code
+        # path for anything that touches the browser's address bar.
+        code = request.args.get("code")
+        if code:
+            token = resolve_connect_code(code)
+            if not token:
+                return jsonify({"error": "This connect link has expired. Please try connecting again."}), 400
+        else:
+            token = request.args.get("token") or get_token()
         if not token or token not in TOKENS:
             return jsonify({"error": "Authentication required. Pass your Snarelytics token as ?token="}), 401
 
