@@ -439,21 +439,21 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
               <div class="field-group">
                 <label class="field-label">Email body</label>
-                <textarea class="field-textarea" id="email-body" placeholder="Paste the complete email content here…"></textarea>
+                <textarea class="field-textarea" id="email-body" placeholder=""></textarea>
               </div>
               <div class="field-row">
                 <div class="field-group">
                   <label class="field-label">Sender address</label>
-                  <input class="field-input" id="sender" placeholder="e.g. noreply@paypal-secure.tk">
+                  <input class="field-input" id="sender" placeholder="">
                 </div>
                 <div class="field-group">
                   <label class="field-label">Subject line</label>
-                  <input class="field-input" id="subject" placeholder="e.g. URGENT: Verify your account">
+                  <input class="field-input" id="subject" placeholder="">
                 </div>
               </div>
               <div class="field-group">
                 <label class="field-label">Email headers (paste full headers for SPF/DKIM/DMARC analysis)</label>
-                <textarea class="field-textarea" id="raw-headers" style="min-height:70px" placeholder="Paste raw email headers here (optional) — enables SPF, DKIM, DMARC validation"></textarea>
+                <textarea class="field-textarea" id="raw-headers" style="min-height:70px" placeholder=""></textarea>
               </div>
               <button class="btn-analyze" id="analyze-btn" onclick="analyzeEmail()">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3" stroke-linecap="round"/></svg>
