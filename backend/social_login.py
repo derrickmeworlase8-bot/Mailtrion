@@ -173,8 +173,9 @@ def register_social_login_routes(app, get_db, audit, TOKENS):
                     conn.close()
 
                     token = pysecrets.token_hex(32)
-                    TOKENS[token] = {"id": user["id"], "username": user["username"], "role": user["role"]}
-                    return redirect(f"/?social_login_token={token}")
+                    TOKENS[token] = {"id": user["id"], "username": user["username"], "role": user["role"],
+                                      "organization": user["organization"]}
+                    return redirect(f"/?social_login_token={token}&social_provider=google")
                 except Exception as e:
                     log.error(f"[google-login] callback failed: {e!r}", exc_info=True)
                     return redirect(f"/?social_login_error=Google+sign-in+failed")
@@ -231,8 +232,9 @@ def register_social_login_routes(app, get_db, audit, TOKENS):
                     conn.close()
 
                     token = pysecrets.token_hex(32)
-                    TOKENS[token] = {"id": user["id"], "username": user["username"], "role": user["role"]}
-                    return redirect(f"/?social_login_token={token}")
+                    TOKENS[token] = {"id": user["id"], "username": user["username"], "role": user["role"],
+                                      "organization": user["organization"]}
+                    return redirect(f"/?social_login_token={token}&social_provider=microsoft")
                 except Exception as e:
                     log.error(f"[microsoft-login] callback failed: {e!r}", exc_info=True)
                     return redirect("/?social_login_error=Microsoft+sign-in+failed")

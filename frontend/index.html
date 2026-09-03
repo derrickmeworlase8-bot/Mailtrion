@@ -182,6 +182,29 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
 /* ── QUARANTINE ── */
 .qitem{background:var(--bg2);border:1px solid var(--red-border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px}
+
+/* ── Email integrations page redesign ──────────────────────────────────── */
+.connectors-summary{display:flex;align-items:center;gap:20px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin-bottom:20px}
+.connectors-summary-count{font-size:28px;font-weight:700;color:var(--text)}
+.connectors-summary-label{font-size:12px;color:var(--text2)}
+.connectors-summary-dots{display:flex;gap:6px;margin-left:auto}
+.connectors-summary-dot{width:9px;height:9px;border-radius:50%;background:var(--border2)}
+.connectors-summary-dot.on{background:var(--green)}
+.connector-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px}
+.connector-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s}
+.connector-card:hover{border-color:var(--border2)}
+.connector-card-top{height:4px;width:100%}
+.connector-card-body{padding:18px 18px 16px;flex:1;display:flex;flex-direction:column}
+.connector-card-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:4px}
+.connector-card-title{font-size:14px;font-weight:600;color:var(--text)}
+.connector-card-sub{font-size:11px;color:var(--text3);line-height:1.5;margin-top:2px}
+.connector-card-refresh{margin-left:auto;flex-shrink:0}
+.connector-card-status{flex:1;margin:14px 0}
+.connector-card-actions{margin-top:auto}
+.connector-empty{text-align:center;padding:20px 10px;color:var(--text3)}
+.connector-empty-title{font-size:12px;color:var(--text2);margin-top:8px}
+.connector-account{background:var(--bg2);border:1px solid var(--green-border);border-radius:var(--radius-sm);padding:12px}
+.how-it-works-toggle{cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between}
 .qitem-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .qitem-sender{font-size:13px;font-weight:500}
 .qitem-subject{font-size:12px;color:var(--text2);margin-bottom:6px}
@@ -590,54 +613,86 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
     <!-- GMAIL INTEGRATION PAGE -->
     <div class="page" id="page-gmail">
-      <div class="panel" style="margin-bottom:20px">
-        <div class="panel-head">
-          <div><div class="panel-title" style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#EA4335"/><path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Gmail</div><div class="panel-sub">Snarelytics polls a connected inbox and quarantines phishing automatically — no copy-paste needed</div></div>
-          <button class="btn-sm" onclick="loadGmailStatus()">↺ Refresh</button>
+      <div class="connectors-summary">
+        <div>
+          <div class="connectors-summary-count" id="connectors-count">0/3</div>
+          <div class="connectors-summary-label">Mailbox providers connected</div>
         </div>
-        <div class="panel-body">
-          <div id="gmail-accounts-list">
-            <div class="empty"><div class="empty-title">Loading…</div></div>
-          </div>
-          <div style="margin-top:16px">
-            <button class="btn-primary" id="gmail-connect-btn" onclick="connectProvider('gmail')">+ Connect Gmail account</button>
-          </div>
+        <div class="connectors-summary-dots" id="connectors-dots">
+          <span class="connector-summary-dot-gmail connectors-summary-dot"></span>
+          <span class="connector-summary-dot-outlook connectors-summary-dot"></span>
+          <span class="connector-summary-dot-imap connectors-summary-dot"></span>
         </div>
       </div>
 
-      <div class="panel" style="margin-bottom:20px">
-        <div class="panel-head">
-          <div><div class="panel-title" style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#0078D4"/><path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Outlook / Microsoft 365</div><div class="panel-sub">Works with work, school, and personal Outlook/Hotmail/Live accounts</div></div>
-          <button class="btn-sm" onclick="loadOutlookStatus()">↺ Refresh</button>
-        </div>
-        <div class="panel-body">
-          <div id="outlook-accounts-list">
-            <div class="empty"><div class="empty-title">Loading…</div></div>
+      <div class="connector-grid">
+        <div class="connector-card">
+          <div class="connector-card-top" style="background:#EA4335"></div>
+          <div class="connector-card-body">
+            <div class="connector-card-head">
+              <svg width="32" height="32" viewBox="0 0 24 24" style="flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#EA4335"/><path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div>
+                <div class="connector-card-title">Gmail</div>
+                <div class="connector-card-sub">Polls inbox &amp; spam automatically</div>
+              </div>
+              <button class="btn-sm connector-card-refresh" onclick="loadGmailStatus()">↺</button>
+            </div>
+            <div class="connector-card-status" id="gmail-accounts-list">
+              <div class="connector-empty"><div class="connector-empty-title">Loading…</div></div>
+            </div>
+            <div class="connector-card-actions">
+              <button class="btn-primary" id="gmail-connect-btn" onclick="connectProvider('gmail')">+ Connect Gmail account</button>
+            </div>
           </div>
-          <div style="margin-top:16px">
-            <button class="btn-primary" id="outlook-connect-btn" onclick="connectProvider('outlook')">+ Connect Outlook account</button>
-          </div>
         </div>
-      </div>
 
-      <div class="panel" style="margin-bottom:20px">
-        <div class="panel-head">
-          <div><div class="panel-title" style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#6001D2"/><path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Yahoo / Other (IMAP)</div><div class="panel-sub">Yahoo doesn't support one-click sign-in for third-party apps — uses an app-specific password instead</div></div>
-          <button class="btn-sm" onclick="loadImapStatus()">↺ Refresh</button>
-        </div>
-        <div class="panel-body">
-          <div id="imap-accounts-list">
-            <div class="empty"><div class="empty-title">Loading…</div></div>
+        <div class="connector-card">
+          <div class="connector-card-top" style="background:#0078D4"></div>
+          <div class="connector-card-body">
+            <div class="connector-card-head">
+              <svg width="32" height="32" viewBox="0 0 24 24" style="flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#0078D4"/><path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div>
+                <div class="connector-card-title">Outlook / Microsoft 365</div>
+                <div class="connector-card-sub">Work, school, or personal accounts</div>
+              </div>
+              <button class="btn-sm connector-card-refresh" onclick="loadOutlookStatus()">↺</button>
+            </div>
+            <div class="connector-card-status" id="outlook-accounts-list">
+              <div class="connector-empty"><div class="connector-empty-title">Loading…</div></div>
+            </div>
+            <div class="connector-card-actions">
+              <button class="btn-primary" id="outlook-connect-btn" onclick="connectProvider('outlook')">+ Connect Outlook account</button>
+            </div>
           </div>
-          <div style="margin-top:16px" id="imap-connect-form-wrap">
-            <button class="btn-primary" id="imap-connect-btn" onclick="showImapForm()">+ Connect Yahoo / IMAP account</button>
+        </div>
+
+        <div class="connector-card">
+          <div class="connector-card-top" style="background:#6001D2"></div>
+          <div class="connector-card-body">
+            <div class="connector-card-head">
+              <svg width="32" height="32" viewBox="0 0 24 24" style="flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#6001D2"/><path d="M5 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M5.5 8 12 13l6.5-5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div>
+                <div class="connector-card-title">Yahoo / Other (IMAP)</div>
+                <div class="connector-card-sub">Uses an app-specific password</div>
+              </div>
+              <button class="btn-sm connector-card-refresh" onclick="loadImapStatus()">↺</button>
+            </div>
+            <div class="connector-card-status" id="imap-accounts-list">
+              <div class="connector-empty"><div class="connector-empty-title">Loading…</div></div>
+            </div>
+            <div class="connector-card-actions" id="imap-connect-form-wrap">
+              <button class="btn-primary" id="imap-connect-btn" onclick="showImapForm()">+ Connect Yahoo / IMAP account</button>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><div class="panel-title">How it works</div></div>
-        <div class="panel-body" style="font-size:12px;color:var(--text2);line-height:2">
+        <div class="panel-head how-it-works-toggle" onclick="toggleHowItWorks()">
+          <div class="panel-title">How it works</div>
+          <span id="how-it-works-chevron" style="color:var(--text3);font-size:12px">▾</span>
+        </div>
+        <div class="panel-body" id="how-it-works-body" style="font-size:12px;color:var(--text2);line-height:2">
           Connecting an account grants Snarelytics read + quarantine access to
           that inbox via the provider's own OAuth sign-in (nothing is stored
           except an access token — never your password). Once connected, both
@@ -937,6 +992,7 @@ function launchApp(){
   const params=new URLSearchParams(window.location.search);
   const socialToken=params.get('social_login_token');
   const socialError=params.get('social_login_error');
+  const socialProvider=params.get('social_provider'); // 'google' or 'microsoft' — set only on a fresh social sign-in
 
   if(socialToken){
     AUTH_TOKEN=socialToken;
@@ -964,6 +1020,33 @@ function launchApp(){
         window.history.replaceState({},'',window.location.pathname);
         const label=gmailConnected?'Gmail':'Outlook';
         setTimeout(()=>alert(label+' connected: '+connected),300);
+      }
+      // Signed in via Google/Microsoft just now — offer to connect that same
+      // account for scanning too, rather than leaving them to find the
+      // Email Integrations page on their own. Full OAuth consent for the
+      // broader mailbox scope still has to happen on Google/Microsoft's own
+      // screen either way (see connectProvider()) — this just skips the
+      // extra navigation + click to get there.
+      if(socialProvider==='google' || socialProvider==='microsoft'){
+        const provider = socialProvider==='google' ? 'gmail' : 'outlook';
+        const label = socialProvider==='google' ? 'Gmail' : 'Outlook';
+        try{
+          const statusResp = await apiFetch('/auth/'+provider+'/status',{});
+          if(statusResp.ok){
+            const statusData = await statusResp.json();
+            const alreadyConnected = (statusData.accounts||[]).some(a=>a.is_active);
+            if(!alreadyConnected){
+              setTimeout(()=>{
+                if(confirm('Also connect this '+label+' account for automatic phishing scanning?')){
+                  connectProvider(provider);
+                } else {
+                  showPage('gmail');
+                  document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')==="showPage('gmail')") n.classList.add('active');});
+                }
+              },300);
+            }
+          }
+        }catch(e){}
       }
     }
     else{AUTH_TOKEN=null;localStorage.removeItem('pg_token');}
@@ -1267,32 +1350,34 @@ async function loadProviderStatus(provider){
     if(!r.ok){ // provider not configured on the server, or route missing entirely
       let msg=cfg.label+' integration not set up on the server yet.';
       try{ const errBody=await r.json(); if(errBody.error) msg=errBody.error; }catch(e){}
-      if(list) list.innerHTML='<div class="empty"><div class="empty-icon">⚙️</div><div class="empty-title">Not available yet</div><div style="font-size:11px;color:var(--text3);margin-top:6px;max-width:400px;margin-left:auto;margin-right:auto">'+msg+'</div></div>';
+      if(list) list.innerHTML='<div class="connector-empty"><div style="font-size:22px">⚙️</div><div class="connector-empty-title">Not available yet</div><div style="font-size:10px;color:var(--text3);margin-top:6px">'+msg+'</div></div>';
       await refreshCombinedBadge();
+      await updateConnectorsSummary();
       return;
     }
     const d=await r.json();
     const accounts=(d.accounts||[]).filter(a=>a.is_active);
-    if(!list){ await refreshCombinedBadge(); return; }
+    if(!list){ await refreshCombinedBadge(); await updateConnectorsSummary(); return; }
     if(!accounts.length){
-      list.innerHTML='<div class="empty"><div class="empty-icon">'+providerIcon(cfg.iconKey,32)+'</div><div class="empty-title">No '+cfg.label+' account connected</div></div>';
+      list.innerHTML='<div class="connector-empty">'+providerIcon(cfg.iconKey,28)+'<div class="connector-empty-title">No '+cfg.label+' account connected</div></div>';
       await refreshCombinedBadge();
+      await updateConnectorsSummary();
       return;
     }
     list.innerHTML=accounts.map(a=>`
-      <div class="qitem">
-        <div class="qitem-head">
-          <div class="qitem-sender" style="display:flex;align-items:center;gap:8px">${providerIcon(cfg.iconKey,18)} ${a[cfg.addressField]}</div>
-          <span style="font-size:11px;color:var(--green);font-weight:600">● Connected</span>
+      <div class="connector-account">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:600;color:var(--text);word-break:break-all">${a[cfg.addressField]}</div>
+          <span style="font-size:10px;color:var(--green);font-weight:600;flex-shrink:0;margin-left:8px">● Connected</span>
         </div>
-        <div class="qitem-meta">Connected: ${(a.connected_at||'').substring(0,16)} · Last checked: ${a.last_polled_at?a.last_polled_at.substring(0,16):'not yet'}</div>
-        <div class="qitem-actions">
-          <button class="btn-delete" onclick="disconnectProvider('${provider}',${a.id})">✕ Disconnect</button>
-        </div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Last checked: ${a.last_polled_at?a.last_polled_at.substring(0,16):'not yet'}</div>
+        <button class="btn-delete" style="width:100%" onclick="disconnectProvider('${provider}',${a.id})">✕ Disconnect</button>
       </div>`).join('');
     await refreshCombinedBadge();
+    await updateConnectorsSummary();
   }catch(e){
     await refreshCombinedBadge();
+    await updateConnectorsSummary();
   }
 }
 
@@ -1325,6 +1410,46 @@ async function refreshCombinedBadge(){
 
 function loadGmailStatus(){ return loadProviderStatus('gmail'); }
 function loadOutlookStatus(){ return loadProviderStatus('outlook'); }
+
+// Drives the "X/3 connected" summary strip and status dots at the top of
+// the Email Integrations page. Cheap to call after each provider's own
+// status load — it just re-checks all three each time rather than trying
+// to track state across three async calls that can finish in any order.
+async function updateConnectorsSummary(){
+  const countEl=document.getElementById('connectors-count');
+  if(!countEl) return; // page not currently mounted
+  let connected=0;
+  const flags={gmail:false, outlook:false, imap:false};
+  for(const provider of ['gmail','outlook']){
+    try{
+      const r=await apiFetch('/auth/'+provider+'/status',{});
+      if(r.ok){
+        const d=await r.json();
+        if((d.accounts||[]).some(a=>a.is_active)){ flags[provider]=true; connected++; }
+      }
+    }catch(e){}
+  }
+  try{
+    const r=await apiFetch('/auth/imap/status',{});
+    if(r.ok){
+      const d=await r.json();
+      if((d.accounts||[]).some(a=>a.is_active)){ flags.imap=true; connected++; }
+    }
+  }catch(e){}
+  countEl.textContent=connected+'/3';
+  document.querySelector('.connector-summary-dot-gmail')?.classList.toggle('on',flags.gmail);
+  document.querySelector('.connector-summary-dot-outlook')?.classList.toggle('on',flags.outlook);
+  document.querySelector('.connector-summary-dot-imap')?.classList.toggle('on',flags.imap);
+}
+
+function toggleHowItWorks(){
+  const body=document.getElementById('how-it-works-body');
+  const chev=document.getElementById('how-it-works-chevron');
+  if(!body) return;
+  const collapsed=body.style.display==='none';
+  body.style.display=collapsed?'block':'none';
+  if(chev) chev.textContent=collapsed?'▾':'▸';
+}
 
 async function connectProvider(provider){
   const cfg=PROVIDER_CONFIG[provider];
@@ -1384,32 +1509,34 @@ async function loadImapStatus(){
   try{
     const r=await apiFetch('/auth/imap/status',{});
     if(!r.ok){
-      if(list) list.innerHTML='<div class="empty"><div class="empty-icon">⚙️</div><div class="empty-title">Not available</div></div>';
+      if(list) list.innerHTML='<div class="connector-empty"><div style="font-size:22px">⚙️</div><div class="connector-empty-title">Not available</div></div>';
       await refreshCombinedBadge();
+      await updateConnectorsSummary();
       return;
     }
     const d=await r.json();
     const accounts=(d.accounts||[]).filter(a=>a.is_active);
-    if(!list){ await refreshCombinedBadge(); return; }
+    if(!list){ await refreshCombinedBadge(); await updateConnectorsSummary(); return; }
     if(!accounts.length){
-      list.innerHTML='<div class="empty"><div class="empty-icon">'+imapProviderIcon('yahoo',32)+'</div><div class="empty-title">No Yahoo/IMAP account connected</div></div>';
+      list.innerHTML='<div class="connector-empty">'+imapProviderIcon('yahoo',28)+'<div class="connector-empty-title">No Yahoo/IMAP account connected</div></div>';
       await refreshCombinedBadge();
+      await updateConnectorsSummary();
       return;
     }
     list.innerHTML=accounts.map(a=>`
-      <div class="qitem">
-        <div class="qitem-head">
-          <div class="qitem-sender" style="display:flex;align-items:center;gap:8px">${imapProviderIcon(a.provider_label,18)} ${a.username} <span style="color:var(--text3);font-weight:400">(${a.provider_label})</span></div>
-          <span style="font-size:11px;color:var(--green);font-weight:600">● Connected</span>
+      <div class="connector-account">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:600;color:var(--text);word-break:break-all">${a.username} <span style="color:var(--text3);font-weight:400">(${a.provider_label})</span></div>
+          <span style="font-size:10px;color:var(--green);font-weight:600;flex-shrink:0;margin-left:8px">● Connected</span>
         </div>
-        <div class="qitem-meta">Connected: ${(a.connected_at||'').substring(0,16)} · Last checked: ${a.last_polled_at?a.last_polled_at.substring(0,16):'not yet'}</div>
-        <div class="qitem-actions">
-          <button class="btn-delete" onclick="disconnectImap(${a.id})">✕ Disconnect</button>
-        </div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Last checked: ${a.last_polled_at?a.last_polled_at.substring(0,16):'not yet'}</div>
+        <button class="btn-delete" style="width:100%" onclick="disconnectImap(${a.id})">✕ Disconnect</button>
       </div>`).join('');
     await refreshCombinedBadge();
+    await updateConnectorsSummary();
   }catch(e){
     await refreshCombinedBadge();
+    await updateConnectorsSummary();
   }
 }
 
