@@ -1,5 +1,5 @@
 """
-Snarelytics — Outlook / Microsoft 365 provider
+Mailtrion — Outlook / Microsoft 365 provider
 
 Implements EmailProvider against the Microsoft Graph API, using MSAL for
 the OAuth token lifecycle. Written against the exact same interface as
@@ -29,11 +29,11 @@ from crypto_utils import encrypt_value, decrypt_value
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 SCOPES = ["Mail.ReadWrite", "User.Read"]  # offline_access is implicit for MSAL confidential clients
-QUARANTINE_FOLDER_NAME = "Snarelytics Quarantine"
+QUARANTINE_FOLDER_NAME = "Mailtrion Quarantine"
 
 OUTLOOK_SECRETS_FILE = os.environ.get("OUTLOOK_SECRETS_FILE", DEFAULT_OUTLOOK_SECRETS_FILE)
 
-# Maps Snarelytics's logical folder names to Outlook's well-known folder IDs.
+# Maps Mailtrion's logical folder names to Outlook's well-known folder IDs.
 _FOLDER_CONFIG = {
     "inbox": {"well_known": "inbox", "max_results": 25},
     "spam":  {"well_known": "junkemail", "max_results": 15},

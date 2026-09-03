@@ -1,5 +1,5 @@
 """
-Snarelytics — outbound email (OTP codes, password resets)
+Mailtrion — outbound email (OTP codes, password resets)
 
 IMPORTANT: Render's free tier blocks all outbound SMTP traffic (ports 25,
 465, 587) to prevent spam abuse — this is a platform-wide restriction, not
@@ -26,10 +26,10 @@ import logging
 import requests
 from email.mime.text import MIMEText
 
-log = logging.getLogger("snarelytics.mailer")
+log = logging.getLogger("mailtrion.mailer")
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-RESEND_FROM = os.environ.get("RESEND_FROM", "Snarelytics <onboarding@resend.dev>")
+RESEND_FROM = os.environ.get("RESEND_FROM", "Mailtrion <onboarding@resend.dev>")
 
 SMTP_HOST = os.environ.get("SMTP_HOST")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -97,25 +97,25 @@ def send_email(to_addr: str, subject: str, body_text: str) -> bool:
 
 
 def send_otp_email(to_addr: str, username: str, code: str) -> bool:
-    subject = "Your Snarelytics verification code"
+    subject = "Your Mailtrion verification code"
     body = (
         f"Hi {username},\n\n"
-        f"Your Snarelytics verification code is: {code}\n\n"
+        f"Your Mailtrion verification code is: {code}\n\n"
         f"This code expires in 10 minutes. If you didn't request this, "
         f"you can safely ignore this email.\n\n"
-        f"— Snarelytics"
+        f"— Mailtrion"
     )
     return send_email(to_addr, subject, body)
 
 
 def send_password_reset_email(to_addr: str, username: str, code: str) -> bool:
-    subject = "Your Snarelytics password reset code"
+    subject = "Your Mailtrion password reset code"
     body = (
         f"Hi {username},\n\n"
         f"Your password reset code is: {code}\n\n"
         f"This code expires in 10 minutes. If you didn't request a password "
         f"reset, you can safely ignore this email — your password hasn't been "
         f"changed.\n\n"
-        f"— Snarelytics"
+        f"— Mailtrion"
     )
     return send_email(to_addr, subject, body)

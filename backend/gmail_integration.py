@@ -1,5 +1,5 @@
 """
-Snarelytics — Gmail OAuth routes
+Mailtrion — Gmail OAuth routes
 
 Same structure applies to every provider: handles the Gmail-specific
 OAuth connect/callback/status/disconnect web routes only. The actual
@@ -56,7 +56,7 @@ from crypto_utils import encrypt_value
 
 REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:5000/auth/gmail/callback")
 
-# state -> Snarelytics bearer token, so the callback knows which logged-in
+# state -> Mailtrion bearer token, so the callback knows which logged-in
 # user initiated the OAuth flow. In-memory, matching the existing TOKENS
 # pattern in app.py (fine for a single-instance dev/demo deployment).
 _STATE_TO_PG_TOKEN = {}
@@ -94,7 +94,7 @@ def register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan, r
         else:
             token = request.args.get("token") or get_token()
         if not token or token not in TOKENS:
-            return jsonify({"error": "Authentication required. Pass your Snarelytics token as ?token="}), 401
+            return jsonify({"error": "Authentication required. Pass your Mailtrion token as ?token="}), 401
 
         flow = _get_flow()
         auth_url, state = flow.authorization_url(
@@ -108,7 +108,7 @@ def register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan, r
         state = request.args.get("state")
         pg_token = _STATE_TO_PG_TOKEN.pop(state, None)
         if not pg_token or pg_token not in TOKENS:
-            return jsonify({"error": "Session expired, please reconnect from Snarelytics"}), 400
+            return jsonify({"error": "Session expired, please reconnect from Mailtrion"}), 400
         user = TOKENS[pg_token]
 
         flow = _get_flow(state=state)
@@ -179,7 +179,7 @@ def register_gmail_routes(app, get_token, get_db, audit, TOKENS, perform_scan, r
         conn.execute("UPDATE gmail_accounts SET is_active=0 WHERE id=? AND user_id=?",
                      (account_id, user["id"]))
         # Also clear anything currently quarantined from this account — once
-        # disconnected, Snarelytics no longer has credentials to manage those
+        # disconnected, Mailtrion no longer has credentials to manage those
         # messages in the real mailbox anyway, so leaving them listed here
         # would be misleading. Scan history that was already released/not
         # quarantined is left alone, only the active quarantine queue clears.

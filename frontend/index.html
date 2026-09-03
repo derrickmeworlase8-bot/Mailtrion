@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Snarelytics — Phishing Detection System</title>
+<title>Mailtrion — Phishing Detection System</title>
 <style>
 :root{
   --bg:#0f1117;--bg2:#161b27;--bg3:#1e2433;--card:#1a2035;
@@ -256,10 +256,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   <div class="auth-box">
     <div class="auth-logo">
       <div class="auth-logo-icon">
-        <svg viewBox="0 0 18 18" fill="none"><path d="M9 2L15.5 5.75V12.25L9 16L2.5 12.25V5.75L9 2Z" stroke="white" stroke-width="1.3"/><circle cx="9" cy="9" r="2.1" stroke="white" stroke-width="1.3"/><path d="M9 5.3V4M9 14V12.7M12.7 9H14M4 9H5.3" stroke="white" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <svg viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="10" rx="1.5" stroke="white" stroke-width="1.3"/><path d="M2.5 5L9 10L15.5 5" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9.3L8.1 11L11.5 7.4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div>
-        <div class="auth-title">Snarelytics</div>
+        <div class="auth-title">Mailtrion</div>
         <div class="auth-sub">Organizational Email Security System</div>
       </div>
     </div>
@@ -279,7 +279,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <label class="form-label">Password</label>
         <input class="form-input" id="login-pw" type="password" placeholder="">
       </div>
-      <button class="btn-primary" onclick="doLogin()">Sign in to Snarelytics</button>
+      <button class="btn-primary" onclick="doLogin()">Sign in to Mailtrion</button>
       <div class="auth-error" id="login-error"></div>
       <div style="margin-top:14px;font-size:12px;color:var(--text3);text-align:center">
         <a href="javascript:void(0)" onclick="goToForgotPassword()" style="color:var(--accent)">Forgot password?</a>
@@ -393,8 +393,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   <!-- Sidebar -->
   <div class="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-icon"><svg viewBox="0 0 18 18" fill="none"><path d="M9 2L15.5 5.75V12.25L9 16L2.5 12.25V5.75L9 2Z" stroke="white" stroke-width="1.3"/><circle cx="9" cy="9" r="2.1" stroke="white" stroke-width="1.3"/><path d="M9 5.3V4M9 14V12.7M12.7 9H14M4 9H5.3" stroke="white" stroke-width="1.3" stroke-linecap="round"/></svg></div>
-      <div><div class="logo-title">Snarelytics</div><div class="logo-sub">Email Security</div></div>
+      <div class="logo-icon"><svg viewBox="0 0 18 18" fill="none"><rect x="2" y="4" width="14" height="10" rx="1.5" stroke="white" stroke-width="1.3"/><path d="M2.5 5L9 10L15.5 5" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9.3L8.1 11L11.5 7.4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><div class="logo-title">Mailtrion</div><div class="logo-sub">Email Security</div></div>
     </div>
     <nav class="nav">
       <div class="nav-section">Analysis</div>
@@ -693,7 +693,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
           <span id="how-it-works-chevron" style="color:var(--text3);font-size:12px">▾</span>
         </div>
         <div class="panel-body" id="how-it-works-body" style="font-size:12px;color:var(--text2);line-height:2">
-          Connecting an account grants Snarelytics read + quarantine access to
+          Connecting an account grants Mailtrion read + quarantine access to
           that inbox via the provider's own OAuth sign-in (nothing is stored
           except an access token — never your password). Once connected, both
           the <b style="color:var(--text)">Inbox</b> and
@@ -701,13 +701,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
           automatically every ~90 seconds using the same detection pipeline
           as manual scans, regardless of which provider the account is on.
           Anything scored <b style="color:var(--text)">Phishing</b> is moved
-          into a <b style="color:var(--text)">Snarelytics Quarantine</b>
+          into a <b style="color:var(--text)">Mailtrion Quarantine</b>
           folder/label — reversible any time from the mail provider directly,
           or from the Quarantine page here.
           <br><br>
           Note on Spam/Junk: mail providers typically already filter most
           phishing into Spam using their own authentication checks before
-          Snarelytics ever sees it — scanning that folder mainly surfaces what
+          Mailtrion ever sees it — scanning that folder mainly surfaces what
           was already caught, rather than catching something that was missed.
           <br><br>
           First-time setup on the server (a developer account + OAuth
@@ -1312,7 +1312,7 @@ async function deleteEmail(id){
   try{
     const d=await r.json();
     if(d.mailbox_result && d.mailbox_result.startsWith('FAILED')){
-      alert('Removed from Snarelytics, but there was a problem: '+d.mailbox_result);
+      alert('Removed from Mailtrion, but there was a problem: '+d.mailbox_result);
     }
   }catch(e){}
   loadQuarantine();
@@ -1489,12 +1489,12 @@ async function connectProvider(provider){
 
 async function disconnectProvider(provider,accountId){
   const cfg=PROVIDER_CONFIG[provider];
-  if(!confirm('Disconnect this '+cfg.label+' account? Automated scanning will stop for it, and any of its emails currently in Quarantine will be cleared from Snarelytics too.')) return;
+  if(!confirm('Disconnect this '+cfg.label+' account? Automated scanning will stop for it, and any of its emails currently in Quarantine will be cleared from Mailtrion too.')) return;
   const r=await apiFetch('/auth/'+provider+'/disconnect/'+accountId,{method:'DELETE'});
   try{
     const d=await r.json();
     if(typeof d.cleared_quarantine_items==='number' && d.cleared_quarantine_items>0){
-      alert(cfg.label+' disconnected. '+d.cleared_quarantine_items+' quarantined email(s) from that account were also cleared from Snarelytics.');
+      alert(cfg.label+' disconnected. '+d.cleared_quarantine_items+' quarantined email(s) from that account were also cleared from Mailtrion.');
     }
   }catch(e){}
   loadProviderStatus(provider);
@@ -1541,12 +1541,12 @@ async function loadImapStatus(){
 }
 
 async function disconnectImap(accountId){
-  if(!confirm('Disconnect this account? Automated scanning will stop for it, and any of its emails currently in Quarantine will be cleared from Snarelytics too.')) return;
+  if(!confirm('Disconnect this account? Automated scanning will stop for it, and any of its emails currently in Quarantine will be cleared from Mailtrion too.')) return;
   const r=await apiFetch('/auth/imap/disconnect/'+accountId,{method:'DELETE'});
   try{
     const d=await r.json();
     if(typeof d.cleared_quarantine_items==='number' && d.cleared_quarantine_items>0){
-      alert('Disconnected. '+d.cleared_quarantine_items+' quarantined email(s) from that account were also cleared from Snarelytics.');
+      alert('Disconnected. '+d.cleared_quarantine_items+' quarantined email(s) from that account were also cleared from Mailtrion.');
     }
   }catch(e){}
   loadImapStatus();
@@ -1720,7 +1720,7 @@ async function downloadReport(type){
     const blob=await r.blob();
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=url; a.download='Snarelytics_Report.'+(type==='pdf'?'pdf':'xlsx');
+    a.href=url; a.download='Mailtrion_Report.'+(type==='pdf'?'pdf':'xlsx');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }catch(e){alert('Report failed: '+e.message);}

@@ -1,11 +1,11 @@
 """
-Snarelytics — IMAP (Yahoo and other IMAP providers) routes
+Mailtrion — IMAP (Yahoo and other IMAP providers) routes
 
 Unlike Gmail and Outlook, this isn't an OAuth redirect flow — most
 consumer IMAP providers (Yahoo included) don't offer a practical OAuth
 path for third-party apps. Instead, the user submits their email, an
 app-specific password, and (usually pre-filled) IMAP connection details
-directly to Snarelytics, which tests the login before saving anything.
+directly to Mailtrion, which tests the login before saving anything.
 
 Always registered — IMAP needs no server-side app registration or
 credentials file the way Gmail/Outlook do, so there's no "not configured"

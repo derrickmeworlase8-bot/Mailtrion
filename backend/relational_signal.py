@@ -1,5 +1,5 @@
 """
-Snarelytics — relational sender-reputation signal.
+Mailtrion — relational sender-reputation signal.
 
 The published PhishGuard graph paper (Ramesh et al., 2026) analyses
 sender-receiver relationships with a Neo4j-backed graph model (PageRank,

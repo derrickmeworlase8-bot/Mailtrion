@@ -1,10 +1,10 @@
 """
-Snarelytics — push-based detection for Gmail and Outlook (Approach B).
+Mailtrion — push-based detection for Gmail and Outlook (Approach B).
 
 This is the OAuth-account half of the push/poll hybrid design: Gmail's
 watch() + Cloud Pub/Sub, and Microsoft Graph's change notifications, both
-let the provider notify Snarelytics the instant new mail arrives instead
-of Snarelytics having to ask every 90 seconds. IMAP's equivalent lives in
+let the provider notify Mailtrion the instant new mail arrives instead
+of Mailtrion having to ask every 90 seconds. IMAP's equivalent lives in
 idle_watcher.py — this module only covers the two OAuth providers.
 
 IMPORTANT — this needs configuration only the deploying institution can
@@ -17,7 +17,7 @@ do, and is entirely optional:
     validates that URL synchronously when a subscription is created, so
     this cannot be enabled against localhost. Set OUTLOOK_WEBHOOK_ENABLED=1
     plus PUBLIC_BASE_URL to enable.
-  - Neither is required to run Snarelytics. Unset, both stay off and the
+  - Neither is required to run Mailtrion. Unset, both stay off and the
     90-second poller alone continues covering every Gmail/Outlook account,
     exactly as it did before this module existed. See SETUP_PUSH.md.
 """

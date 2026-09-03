@@ -1,5 +1,5 @@
 """
-Snarelytics — Gmail provider
+Mailtrion — Gmail provider
 
 Implements EmailProvider against the Gmail API. This is a direct,
 behavior-preserving extraction of what used to live inline in
@@ -26,10 +26,10 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.modify",
 ]
-QUARANTINE_LABEL_NAME = "Snarelytics/Quarantine"
+QUARANTINE_LABEL_NAME = "Mailtrion/Quarantine"
 CLIENT_SECRETS_FILE = os.environ.get("GOOGLE_CLIENT_SECRETS", DEFAULT_GOOGLE_CLIENT_SECRETS)
 
-# Maps Snarelytics's logical folder names to Gmail's own query syntax and
+# Maps Mailtrion's logical folder names to Gmail's own query syntax and
 # the system label that should be removed once a message is quarantined.
 _FOLDER_CONFIG = {
     "inbox": {"query": "in:inbox", "remove_label": "INBOX", "max_results": 25},

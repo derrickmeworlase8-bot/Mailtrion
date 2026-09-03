@@ -1,5 +1,5 @@
 """
-Snarelytics — encryption at rest for stored account credentials.
+Mailtrion — encryption at rest for stored account credentials.
 
 Gmail/Outlook OAuth tokens and IMAP app passwords are real credentials
 with mailbox access. They must never sit in the database as plaintext —

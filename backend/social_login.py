@@ -1,12 +1,12 @@
 """
-Snarelytics — social sign-in (Google / Microsoft)
+Mailtrion — social sign-in (Google / Microsoft)
 
 Deliberately separate from gmail_integration.py / outlook_integration.py.
 Those handle "an already-logged-in user connects a mailbox for scanning"
-(broad Mail.ReadWrite-style scopes, requires an existing Snarelytics
+(broad Mail.ReadWrite-style scopes, requires an existing Mailtrion
 session). This handles "prove who you are to create/access your
-Snarelytics account" — only identity scopes (email/profile), and it runs
-BEFORE any Snarelytics session exists, since its whole purpose is to
+Mailtrion account" — only identity scopes (email/profile), and it runs
+BEFORE any Mailtrion session exists, since its whole purpose is to
 create one.
 
 Reuses the same Google Cloud / Azure app registrations as the mailbox
@@ -20,7 +20,7 @@ callback routes:
     Azure Portal → App registrations → your app → Authentication → add:
     https://YOUR-DOMAIN/auth/microsoft/login/callback
 
-A user who signs in this way never sets a Snarelytics password — their
+A user who signs in this way never sets a Mailtrion password — their
 password_hash is a random, never-shown, never-usable value. They always
 come back in through the same provider button. If they later try to
 register that email manually, the normal "account already exists, sign

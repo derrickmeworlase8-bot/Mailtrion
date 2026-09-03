@@ -1,5 +1,5 @@
 """
-Snarelytics — IMAP IDLE watcher (push-based detection for IMAP accounts).
+Mailtrion — IMAP IDLE watcher (push-based detection for IMAP accounts).
 
 This is "Approach B" from the design discussion: instead of only waking
 up every 90 seconds to ask "anything new?", each active IMAP account gets

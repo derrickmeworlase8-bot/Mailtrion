@@ -1,5 +1,5 @@
 """
-Snarelytics - Complete Backend
+Mailtrion - Complete Backend
 AI-Based Phishing Email Detection and Risk Assessment System
 for Organizational Email Security
 
@@ -181,7 +181,7 @@ def serve_frontend():
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index_path):
         return send_file(index_path)
-    return jsonify({"status": "Snarelytics backend running",
+    return jsonify({"status": "Mailtrion backend running",
                     "note": "frontend/index.html not found"}), 200
 
 logging.basicConfig(level=logging.INFO,
@@ -1293,7 +1293,7 @@ def perform_scan(body, sender, subject, auth, user_id, source="manual", gmail_me
     (if any) this scan came from — this is what lets the quarantine
     "delete" action reconstruct the right provider instance later and
     actually remove the message from the real mailbox, not just from
-    Snarelytics's own records.
+    Mailtrion's own records.
     """
     # Idempotency: don't re-scan the same Gmail message twice (poller may overlap)
     if gmail_message_id:
@@ -1598,7 +1598,7 @@ def delete_quarantine(scan_id):
 
     # If this scan came from a connected mail account (not a manual paste-in
     # scan), also remove the actual message from that mailbox — otherwise
-    # deleting here would only clear Snarelytics's own record while the real
+    # deleting here would only clear Mailtrion's own record while the real
     # email keeps sitting in the account's Quarantine folder/label forever.
     if row["provider"] and row["account_id"] and row["gmail_message_id"]:
         try:
@@ -1630,7 +1630,7 @@ def delete_quarantine(scan_id):
     conn.commit(); conn.close()
     audit(current_user()["id"], current_user()["username"],
           "QUARANTINE_DELETE", f"scan_id={scan_id} mailbox_result={mailbox_result}")
-    return jsonify({"message": "Email deleted from Snarelytics", "mailbox_result": mailbox_result})
+    return jsonify({"message": "Email deleted from Mailtrion", "mailbox_result": mailbox_result})
 
 
 @app.route("/quarantine/<scan_id>", methods=["GET"])
@@ -1766,7 +1766,7 @@ def report_pdf():
     styles = getSampleStyleSheet()
     story  = []
 
-    story.append(Paragraph("Snarelytics — Security Report", styles["Title"]))
+    story.append(Paragraph("Mailtrion — Security Report", styles["Title"]))
     story.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", styles["Normal"]))
     story.append(Spacer(1,12))
 
@@ -1816,7 +1816,7 @@ def report_pdf():
     doc.build(story)
     audit(current_user()["id"], current_user()["username"], "REPORT_PDF")
     return send_file(path, as_attachment=True,
-                     download_name="Snarelytics_Report.pdf",
+                     download_name="Mailtrion_Report.pdf",
                      mimetype="application/pdf")
 
 
@@ -1864,7 +1864,7 @@ def report_excel():
     wb.save(path)
     audit(current_user()["id"], current_user()["username"], "REPORT_EXCEL")
     return send_file(path, as_attachment=True,
-                     download_name="Snarelytics_Report.xlsx",
+                     download_name="Mailtrion_Report.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2044,7 +2044,7 @@ if __name__ == "__main__":
     HOST = "0.0.0.0" if IS_HOSTED else "127.0.0.1"
     PORT = int(os.environ.get("PORT", 5000))
 
-    log.info(f"Snarelytics started → http://{HOST}:{PORT}")
+    log.info(f"Mailtrion started → http://{HOST}:{PORT}")
 
     # ── Server hardening ────────────────────────────────────────────────────
     # The previous default here — app.run(debug=True, host="0.0.0.0") — is a

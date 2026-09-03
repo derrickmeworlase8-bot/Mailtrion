@@ -1,5 +1,5 @@
 """
-Snarelytics — shared polling loop.
+Mailtrion — shared polling loop.
 
 This is the one piece of code that actually walks "connected accounts,
 check for new mail, scan it, quarantine if phishing" — written once

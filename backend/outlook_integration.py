@@ -1,5 +1,5 @@
 """
-Snarelytics — Outlook OAuth routes
+Mailtrion — Outlook OAuth routes
 
 Same structure as gmail_integration.py: handles the Outlook-specific
 OAuth connect/callback/status/disconnect web routes only. The actual
@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 REDIRECT_URI = os.environ.get("OUTLOOK_REDIRECT_URI", "http://localhost:5000/auth/outlook/callback")
 
-# state -> Snarelytics bearer token, same pattern as the Gmail flow.
+# state -> Mailtrion bearer token, same pattern as the Gmail flow.
 _STATE_TO_PG_TOKEN = {}
 
 
@@ -47,11 +47,11 @@ def register_outlook_routes(app, get_token, get_db, audit, TOKENS, perform_scan,
         else:
             token = request.args.get("token") or get_token()
         if not token or token not in TOKENS:
-            return jsonify({"error": "Authentication required. Pass your Snarelytics token as ?token="}), 401
+            return jsonify({"error": "Authentication required. Pass your Mailtrion token as ?token="}), 401
 
         msal_app = build_msal_app()
         # Mint our own state token to correlate the callback with the
-        # Snarelytics user who initiated this — same pattern as the Gmail flow.
+        # Mailtrion user who initiated this — same pattern as the Gmail flow.
         state = os.urandom(16).hex()
         auth_url = msal_app.get_authorization_request_url(
             scopes=SCOPES, redirect_uri=REDIRECT_URI, prompt="select_account", state=state
@@ -65,7 +65,7 @@ def register_outlook_routes(app, get_token, get_db, audit, TOKENS, perform_scan,
         code = request.args.get("code")
         pg_token = _STATE_TO_PG_TOKEN.pop(state, None)
         if not pg_token or pg_token not in TOKENS:
-            return jsonify({"error": "Session expired, please reconnect from Snarelytics"}), 400
+            return jsonify({"error": "Session expired, please reconnect from Mailtrion"}), 400
         user = TOKENS[pg_token]
 
         if not code:

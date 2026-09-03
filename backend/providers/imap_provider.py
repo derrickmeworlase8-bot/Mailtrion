@@ -1,5 +1,5 @@
 """
-Snarelytics — Generic IMAP provider (covers Yahoo, iCloud, Zoho, or any
+Mailtrion — Generic IMAP provider (covers Yahoo, iCloud, Zoho, or any
 IMAP-accessible mailbox)
 
 Unlike Gmail and Outlook, most consumer IMAP providers — Yahoo included —
@@ -37,7 +37,7 @@ KNOWN_HOST_PRESETS = {
     "zoho":    {"host": "imap.zoho.com",       "port": 993, "spam_folder": "Spam",      "trash_folder": "Trash"},
     "aol":     {"host": "imap.aol.com",        "port": 993, "spam_folder": "Spam",      "trash_folder": "Trash"},
 }
-QUARANTINE_FOLDER_NAME = "Snarelytics Quarantine"
+QUARANTINE_FOLDER_NAME = "Mailtrion Quarantine"
 
 
 class IMAPProvider(EmailProvider):
