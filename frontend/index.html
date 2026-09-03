@@ -287,8 +287,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <input class="form-input" id="reg-email" type="email" placeholder="">
       </div>
       <div class="form-group">
-        <label class="form-label">Password (min 8 chars)</label>
-        <input class="form-input" id="reg-pw" type="password" placeholder="">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="reg-pw" type="password" placeholder="" oninput="updatePwStrength('reg-pw','reg-pw-meter')">
+        <div id="reg-pw-meter" style="margin-top:6px"></div>
       </div>
       <div class="form-group">
         <label class="form-label">Institution / organization</label>
@@ -351,7 +352,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         </div>
         <div class="form-group">
           <label class="form-label">New password</label>
-          <input class="form-input" id="reset-new-pw" type="password" placeholder="At least 8 characters">
+          <input class="form-input" id="reset-new-pw" type="password" placeholder="" oninput="updatePwStrength('reset-new-pw','reset-pw-meter')">
+          <div id="reset-pw-meter" style="margin-top:6px"></div>
         </div>
         <button class="btn-primary" onclick="doResetPassword()">Reset password</button>
       </div>
@@ -778,12 +780,46 @@ async function doRequestReset(){
   }catch(e){err.textContent='Connection error';err.style.display='block';}
 }
 
+// ── Password strength meter ─────────────────────────────────────────────────
+// Same rule the backend enforces (see password_strength_error() in app.py):
+// 8+ chars, at least one uppercase, one lowercase, one special character.
+function pwCheckRules(pw){
+  return {
+    length:  pw.length>=8,
+    upper:   /[A-Z]/.test(pw),
+    lower:   /[a-z]/.test(pw),
+    special: /[!@#$%^&*()_\-+=\[\]{};:'",.<>/?\\|`~]/.test(pw)
+  };
+}
+function pwIsStrongEnough(pw){
+  const r=pwCheckRules(pw);
+  return r.length&&r.upper&&r.lower&&r.special;
+}
+function updatePwStrength(inputId,meterId){
+  const pw=document.getElementById(inputId).value;
+  const r=pwCheckRules(pw);
+  const passedCount=[r.length,r.upper,r.lower,r.special].filter(Boolean).length;
+  const colors=['var(--red)','var(--red)','var(--orange)','var(--orange)','var(--green)'];
+  const labels=['Too weak','Weak','Fair','Good','Strong'];
+  const color=pw?colors[passedCount]:'var(--border)';
+  const label=pw?labels[passedCount]:'';
+  const item=(ok,text)=>`<span style="color:${ok?'var(--green)':'var(--text3)'};margin-right:10px;font-size:11px">${ok?'✓':'○'} ${text}</span>`;
+  document.getElementById(meterId).innerHTML = pw ? `
+    <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:6px">
+      <div style="height:100%;width:${passedCount*25}%;background:${color};transition:width .2s"></div>
+    </div>
+    <div style="font-size:11px;color:${color};font-weight:600;margin-bottom:4px">${label}</div>
+    <div>${item(r.length,'8+ characters')}${item(r.upper,'Uppercase')}${item(r.lower,'Lowercase')}${item(r.special,'Special character')}</div>
+  ` : '';
+}
+
 async function doResetPassword(){
   const code=document.getElementById('reset-code').value.trim();
   const newPw=document.getElementById('reset-new-pw').value;
   const err=document.getElementById('forgot-error');
   err.style.display='none';
   if(!code||!newPw){err.textContent='Enter the code and a new password';err.style.display='block';return;}
+  if(!pwIsStrongEnough(newPw)){err.textContent='Password must be 8+ characters with uppercase, lowercase, and a special character';err.style.display='block';return;}
   try{
     const r=await fetch(API+'/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:RESET_EMAIL,code,new_password:newPw})});
     const d=await r.json();
@@ -822,6 +858,7 @@ async function doRegister(){
   const err=document.getElementById('reg-error');
   const suc=document.getElementById('reg-success');
   err.style.display='none';suc.style.display='none';
+  if(!pwIsStrongEnough(pw)){err.textContent='Password must be 8+ characters with uppercase, lowercase, and a special character';err.style.display='block';return;}
   try{
     const r=await fetch(API+'/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,email,password:pw,organization})});
     const d=await r.json();
@@ -1506,7 +1543,7 @@ async function loadUsers(){
         <td style="color:var(--text3);font-size:11px">${u.organization||'Unassigned'}</td>
         <td><span class="verdict-chip" style="background:${u.role==='admin'?'var(--purple-bg)':'var(--green-bg)'};color:${u.role==='admin'?'var(--purple)':'var(--green)'}">${u.role}</span></td>
         <td style="color:var(--text3);font-size:11px">${(u.last_login||'Never').substring(0,16)}</td>
-        <td><button class="btn-sm" onclick="setRole(${u.id},'${u.role==='admin'?'analyst':'admin'}')">Make ${u.role==='admin'?'analyst':'admin'}</button></td>
+        <td>${u.id===currentUser.id?'<span style="color:var(--text3);font-size:11px">—</span>':`<button class="btn-sm" onclick="setRole(${u.id},'${u.role==='admin'?'analyst':'admin'}')">Make ${u.role==='admin'?'analyst':'admin'}</button>`}</td>
       </tr>`).join('');
   }catch(e){}
 }

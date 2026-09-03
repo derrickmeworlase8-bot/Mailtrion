@@ -515,6 +515,21 @@ def audit(user_id, username, action, details=""):
 # AUTH HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
+def password_strength_error(pw: str):
+    """Returns an error message string if the password doesn't meet the
+    minimum bar, or None if it's acceptable. Shared by /auth/register and
+    the password-reset confirm endpoint so both enforce the same rule."""
+    if len(pw) < 8:
+        return "Password must be at least 8 characters"
+    if not re.search(r"[A-Z]", pw):
+        return "Password must include at least one uppercase letter"
+    if not re.search(r"[a-z]", pw):
+        return "Password must include at least one lowercase letter"
+    if not re.search(r"[!@#$%^&*()_\-+=\[\]{};:'\",.<>/?\\|`~]", pw):
+        return "Password must include at least one special character"
+    return None
+
+
 def get_token():
     auth = request.headers.get("Authorization","")
     if auth.startswith("Bearer "):
@@ -961,8 +976,9 @@ def register():
 
     if not username or not em or not pw:
         return jsonify({"error":"All fields required"}), 400
-    if len(pw) < 8:
-        return jsonify({"error":"Password must be at least 8 characters"}), 400
+    pw_error = password_strength_error(pw)
+    if pw_error:
+        return jsonify({"error": pw_error}), 400
 
     conn = get_db()
     try:
@@ -1039,8 +1055,9 @@ def reset_password():
 
     if not em or not code or not new_pw:
         return jsonify({"error": "Email, code, and new password are all required"}), 400
-    if len(new_pw) < 8:
-        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    pw_error = password_strength_error(new_pw)
+    if pw_error:
+        return jsonify({"error": pw_error}), 400
 
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE email=?", (em,)).fetchone()
@@ -1685,10 +1702,16 @@ def update_role(uid):
     role = (request.get_json() or {}).get("role","analyst")
     if role not in ("admin","analyst"):
         return jsonify({"error":"Invalid role"}),400
+    user = current_user()
+    # An admin demoting themselves could leave the institution with zero
+    # admins and no way back in short of a database edit — block it
+    # outright rather than relying on the frontend hiding the button.
+    if uid == user["id"] and role != "admin":
+        return jsonify({"error": "You can't remove your own admin access. Ask another admin to do this instead."}), 400
     conn = get_db()
     conn.execute("UPDATE users SET role=? WHERE id=?", (role,uid))
     conn.commit(); conn.close()
-    audit(current_user()["id"], current_user()["username"],
+    audit(user["id"], user["username"],
           "USER_ROLE_UPDATE", f"uid={uid} new_role={role}")
     return jsonify({"message":"Role updated"})
 
