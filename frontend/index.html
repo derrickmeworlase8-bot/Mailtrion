@@ -293,7 +293,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <svg width="16" height="16" viewBox="0 0 18 18"><rect x="1" y="1" width="7.5" height="7.5" fill="#F25022"/><rect x="9.5" y="1" width="7.5" height="7.5" fill="#7FBA00"/><rect x="1" y="9.5" width="7.5" height="7.5" fill="#00A4EF"/><rect x="9.5" y="9.5" width="7.5" height="7.5" fill="#FFB900"/></svg>
         Microsoft
       </button>
-      <button class="social-btn disabled" onclick="alert('Yahoo one-click sign-in isn\'t set up on this server yet. Use email and password instead.')" title="Not yet configured">
+      <button class="social-btn" onclick="socialLogin('yahoo')">
         <svg width="16" height="16" viewBox="0 0 18 18"><path fill="#6001D2" d="M9 0a9 9 0 1 0 0 18A9 9 0 0 0 9 0z"/><path fill="#fff" d="M9.4 9.9 6.7 4.6H4.9l3.6 6.7v2.9h1.7v-2.9l3.6-6.7h-1.7z"/></svg>
         Yahoo
       </button>
@@ -330,7 +330,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
         <svg width="16" height="16" viewBox="0 0 18 18"><rect x="1" y="1" width="7.5" height="7.5" fill="#F25022"/><rect x="9.5" y="1" width="7.5" height="7.5" fill="#7FBA00"/><rect x="1" y="9.5" width="7.5" height="7.5" fill="#00A4EF"/><rect x="9.5" y="9.5" width="7.5" height="7.5" fill="#FFB900"/></svg>
         Microsoft
       </button>
-      <button class="social-btn disabled" onclick="alert('Yahoo one-click sign-in isn\'t set up on this server yet. Use email and password instead.')" title="Not yet configured">
+      <button class="social-btn" onclick="socialLogin('yahoo')">
         <svg width="16" height="16" viewBox="0 0 18 18"><path fill="#6001D2" d="M9 0a9 9 0 1 0 0 18A9 9 0 0 0 9 0z"/><path fill="#fff" d="M9.4 9.9 6.7 4.6H4.9l3.6 6.7v2.9h1.7v-2.9l3.6-6.7h-1.7z"/></svg>
         Yahoo
       </button>
@@ -1045,6 +1045,26 @@ function launchApp(){
                 }
               },300);
             }
+          }
+        }catch(e){}
+      } else if(socialProvider==='yahoo'){
+        // Yahoo sign-in proves identity only — there's no OAuth flow to
+        // hand off into for the mailbox itself (see the note in
+        // social_login.py: Yahoo's mail scope needs separate, restricted
+        // approval, so mailbox connection stays app-password/IMAP-based).
+        // A confirm-then-redirect-into-OAuth prompt doesn't apply here, so
+        // just take them to the Email Integrations page and open the
+        // manual IMAP form directly if they're not already connected.
+        try{
+          const statusResp = await apiFetch('/auth/imap/status',{});
+          if(statusResp.ok){
+            const statusData = await statusResp.json();
+            const alreadyConnected = (statusData.accounts||[]).some(a=>a.is_active);
+            setTimeout(()=>{
+              showPage('gmail');
+              document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')==="showPage('gmail')") n.classList.add('active');});
+              if(!alreadyConnected && typeof showImapForm==='function') showImapForm();
+            },300);
           }
         }catch(e){}
       }

@@ -1,5 +1,5 @@
 """
-Mailtrion — social sign-in (Google / Microsoft)
+Mailtrion — social sign-in (Google / Microsoft / Yahoo)
 
 Deliberately separate from gmail_integration.py / outlook_integration.py.
 Those handle "an already-logged-in user connects a mailbox for scanning"
@@ -9,16 +9,28 @@ Mailtrion account" — only identity scopes (email/profile), and it runs
 BEFORE any Mailtrion session exists, since its whole purpose is to
 create one.
 
-Reuses the same Google Cloud / Azure app registrations as the mailbox
-integrations (same client_secret.json / outlook_secret.json) — but needs
-its OWN redirect URIs added in each console, since these are different
-callback routes:
+Google and Microsoft reuse the same Cloud/Azure app registrations as the
+mailbox integrations (same client_secret.json / outlook_secret.json) —
+but need their OWN redirect URIs added in each console, since these are
+different callback routes:
 
     Google Cloud Console → Credentials → your OAuth client → Authorized
     redirect URIs → add:  https://YOUR-DOMAIN/auth/google/login/callback
 
     Azure Portal → App registrations → your app → Authentication → add:
     https://YOUR-DOMAIN/auth/microsoft/login/callback
+
+Yahoo has its own, separate app registration (Yahoo Developer Network —
+developer.yahoo.com), since it isn't used by the mailbox-connect side at
+all (Yahoo mailboxes are connected via IMAP app password instead — see
+imap_integration.py — because Yahoo's mail scope requires a separate
+restricted-scope approval Yahoo grants case-by-case). Set:
+
+    YAHOO_CLIENT_ID, YAHOO_CLIENT_SECRET  (from a YDN app)
+    YAHOO_LOGIN_REDIRECT_URI = https://YOUR-DOMAIN/auth/yahoo/login/callback
+
+    Yahoo Developer Network → your app → Redirect URI(s) → add the same
+    https://YOUR-DOMAIN/auth/yahoo/login/callback
 
 A user who signs in this way never sets a Mailtrion password — their
 password_hash is a random, never-shown, never-usable value. They always
@@ -51,6 +63,8 @@ GOOGLE_LOGIN_REDIRECT_URI = os.environ.get(
     "GOOGLE_LOGIN_REDIRECT_URI", "http://localhost:5000/auth/google/login/callback")
 MICROSOFT_LOGIN_REDIRECT_URI = os.environ.get(
     "MICROSOFT_LOGIN_REDIRECT_URI", "http://localhost:5000/auth/microsoft/login/callback")
+YAHOO_LOGIN_REDIRECT_URI = os.environ.get(
+    "YAHOO_LOGIN_REDIRECT_URI", "http://localhost:5000/auth/yahoo/login/callback")
 
 GOOGLE_LOGIN_SCOPES = [
     "openid",
@@ -58,6 +72,7 @@ GOOGLE_LOGIN_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
 MICROSOFT_LOGIN_SCOPES = ["User.Read"]
+YAHOO_LOGIN_SCOPES = "openid email profile"
 
 # state -> expiry timestamp, just to bound how long a pending login attempt
 # is considered valid (CSRF protection for the OAuth redirect round-trip).
@@ -242,3 +257,89 @@ def register_social_login_routes(app, get_db, audit, TOKENS):
             app.logger.info("Microsoft one-click sign-in enabled")
     except ImportError:
         pass
+
+    # ── Yahoo ────────────────────────────────────────────────────────────
+    # Yahoo has no Python SDK equivalent to google-auth-oauthlib/msal, so
+    # this talks to its OAuth 2.0 / OpenID Connect endpoints directly with
+    # `requests`. Credentials come from Yahoo Developer Network (YDN) —
+    # separate from the IMAP app-password flow in imap_integration.py,
+    # which remains how Yahoo *mailboxes* get connected for scanning:
+    # Yahoo's mail scope is a restricted scope requiring separate approval
+    # from Yahoo, so sign-in (identity only) and mailbox access stay on
+    # two different paths, same as the Gmail/Outlook split described
+    # at the top of this file.
+    yahoo_client_id = os.environ.get("YAHOO_CLIENT_ID")
+    yahoo_client_secret = os.environ.get("YAHOO_CLIENT_SECRET")
+    if yahoo_client_id and yahoo_client_secret:
+        import requests as _requests
+        import base64 as _base64
+        import json as _json
+
+        def _decode_id_token_claims(id_token):
+            """Decodes the middle (payload) segment of a JWT without
+            verifying its signature. Safe here specifically because this
+            id_token comes straight from Yahoo's token endpoint over TLS
+            in a direct server-to-server call this function itself just
+            made — it was never passed through the browser or any
+            untrusted party — so there's nothing to forge in transit."""
+            payload_b64 = id_token.split(".")[1]
+            padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+            return _json.loads(_base64.urlsafe_b64decode(padded))
+
+        @app.route("/auth/yahoo/login", methods=["GET"])
+        def yahoo_login():
+            state = _new_state()
+            from urllib.parse import urlencode
+            params = {
+                "client_id": yahoo_client_id,
+                "redirect_uri": YAHOO_LOGIN_REDIRECT_URI,
+                "response_type": "code",
+                "scope": YAHOO_LOGIN_SCOPES,
+                "state": state,
+                "nonce": pysecrets.token_urlsafe(16),
+            }
+            return redirect("https://api.login.yahoo.com/oauth2/request_auth?" + urlencode(params))
+
+        @app.route("/auth/yahoo/login/callback", methods=["GET"])
+        def yahoo_login_callback():
+            state = request.args.get("state")
+            code = request.args.get("code")
+            if not _consume_state(state):
+                return redirect("/?social_login_error=Session+expired,+please+try+again")
+            if not code:
+                return redirect("/?social_login_error=Yahoo+sign-in+was+cancelled")
+
+            try:
+                basic = _base64.b64encode(f"{yahoo_client_id}:{yahoo_client_secret}".encode()).decode()
+                token_resp = _requests.post(
+                    "https://api.login.yahoo.com/oauth2/get_token",
+                    headers={"Authorization": f"Basic {basic}",
+                             "Content-Type": "application/x-www-form-urlencoded"},
+                    data={"grant_type": "authorization_code", "code": code,
+                          "redirect_uri": YAHOO_LOGIN_REDIRECT_URI},
+                    timeout=10,
+                )
+                token_resp.raise_for_status()
+                id_token = token_resp.json().get("id_token")
+                if not id_token:
+                    return redirect("/?social_login_error=Yahoo+sign-in+failed")
+
+                claims = _decode_id_token_claims(id_token)
+                email = claims.get("email")
+                name = claims.get("given_name") or claims.get("name") or ""
+                if not email:
+                    return redirect("/?social_login_error=Could+not+get+your+email+from+Yahoo")
+
+                conn = get_db()
+                user = _find_or_create_social_user(conn, get_db, audit, email, name)
+                conn.close()
+
+                token = pysecrets.token_hex(32)
+                TOKENS[token] = {"id": user["id"], "username": user["username"], "role": user["role"],
+                                  "organization": user["organization"]}
+                return redirect(f"/?social_login_token={token}&social_provider=yahoo")
+            except Exception as e:
+                log.error(f"[yahoo-login] callback failed: {e!r}", exc_info=True)
+                return redirect("/?social_login_error=Yahoo+sign-in+failed")
+
+        app.logger.info("Yahoo one-click sign-in enabled")
