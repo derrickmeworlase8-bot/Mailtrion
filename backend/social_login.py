@@ -268,8 +268,14 @@ def register_social_login_routes(app, get_db, audit, TOKENS):
     # from Yahoo, so sign-in (identity only) and mailbox access stay on
     # two different paths, same as the Gmail/Outlook split described
     # at the top of this file.
-    yahoo_client_id = os.environ.get("YAHOO_CLIENT_ID")
-    yahoo_client_secret = os.environ.get("YAHOO_CLIENT_SECRET")
+    # .strip() matters here specifically: copy-pasting a credential from a
+    # web page into Render's environment variable UI can silently pick up
+    # a trailing newline or space along with the visible text. That
+    # invisible character changes the value Yahoo receives without
+    # changing anything visible in any screenshot of it — exactly the
+    # failure mode that produced Yahoo's "invalid client id" error here.
+    yahoo_client_id = (os.environ.get("YAHOO_CLIENT_ID") or "").strip()
+    yahoo_client_secret = (os.environ.get("YAHOO_CLIENT_SECRET") or "").strip()
     if yahoo_client_id and yahoo_client_secret:
         import requests as _requests
         import base64 as _base64
