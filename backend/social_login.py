@@ -72,14 +72,14 @@ GOOGLE_LOGIN_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
 MICROSOFT_LOGIN_SCOPES = ["User.Read"]
-YAHOO_LOGIN_SCOPES = "openid email"
-# "openid profile email" together triggered Yahoo's invalid_scope error;
-# "openid" alone got through consent but didn't return an email claim.
-# "profile" specifically is the more likely culprit of the two extra
-# scopes (Yahoo's scope names don't necessarily match Google/Microsoft's
-# despite looking identical) — this targets just what's actually needed
-# (an email address) without the name/profile scope that may be the
-# actual invalid one.
+YAHOO_LOGIN_SCOPES = "openid"
+# Confirmed by testing, not just docs: "openid" alone is the ONLY scope
+# string this Yahoo app accepts. "openid email", "openid profile", and
+# "openid profile email" were all rejected with invalid_scope — so this
+# app's registration only permits the bare minimum. Whatever email/name
+# claims aren't included by default now get logged in detail at the
+# claims/userinfo lines below so the actual shape of what Yahoo returns
+# is visible, instead of guessing at scope combinations further.
 
 # state -> expiry timestamp, just to bound how long a pending login attempt
 # is considered valid (CSRF protection for the OAuth redirect round-trip).
