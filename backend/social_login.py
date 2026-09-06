@@ -72,15 +72,14 @@ GOOGLE_LOGIN_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
 MICROSOFT_LOGIN_SCOPES = ["User.Read"]
-YAHOO_LOGIN_SCOPES = "openid"
-# Yahoo's own docs and several independent bug reports (Firebase Auth,
-# Appwrite) confirm "openid" alone is what's required/supported for
-# issuing an ID token — requesting "profile"/"email" alongside it produces
-# exactly the "invalid_scope" error this app was hitting. The ID token
-# Yahoo issues for "openid" already includes email/name claims by default
-# (see _decode_id_token_claims below), so nothing is actually lost by
-# dropping the extra scope names — they were never doing anything useful
-# here and were the cause of the failure.
+YAHOO_LOGIN_SCOPES = "openid email"
+# "openid profile email" together triggered Yahoo's invalid_scope error;
+# "openid" alone got through consent but didn't return an email claim.
+# "profile" specifically is the more likely culprit of the two extra
+# scopes (Yahoo's scope names don't necessarily match Google/Microsoft's
+# despite looking identical) — this targets just what's actually needed
+# (an email address) without the name/profile scope that may be the
+# actual invalid one.
 
 # state -> expiry timestamp, just to bound how long a pending login attempt
 # is considered valid (CSRF protection for the OAuth redirect round-trip).
@@ -357,6 +356,7 @@ def register_social_login_routes(app, get_db, audit, TOKENS):
                 claims = _decode_id_token_claims(id_token)
                 email = claims.get("email")
                 name = claims.get("given_name") or claims.get("name") or ""
+                log.info(f"[yahoo-login] id_token claims: {claims!r}")
 
                 # With scope=openid alone, the ID token's claims can vary
                 # by account type — fall back to Yahoo's userinfo endpoint
@@ -369,6 +369,8 @@ def register_social_login_routes(app, get_db, audit, TOKENS):
                             headers={"Authorization": f"Bearer {access_token}"},
                             timeout=10,
                         )
+                        log.info(f"[yahoo-login] userinfo status={userinfo_resp.status_code} "
+                                 f"body={userinfo_resp.text!r}")
                         if userinfo_resp.ok:
                             userinfo = userinfo_resp.json()
                             email = userinfo.get("email") or email
@@ -377,6 +379,8 @@ def register_social_login_routes(app, get_db, audit, TOKENS):
                         log.warning(f"[yahoo-login] userinfo fallback failed: {e!r}")
 
                 if not email:
+                    log.error(f"[yahoo-login] no email found — claims={claims!r} "
+                              f"has_access_token={bool(access_token)}")
                     return redirect("/?social_login_error=Could+not+get+your+email+from+Yahoo")
 
                 conn = get_db()
