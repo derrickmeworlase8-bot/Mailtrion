@@ -313,6 +313,20 @@ def register_social_login_routes(app, get_db, audit, TOKENS):
             if not _consume_state(state):
                 return redirect("/?social_login_error=Session+expired,+please+try+again")
             if not code:
+                # Log whatever Yahoo actually sent instead of guessing —
+                # "cancelled" was a generic label this route used to apply
+                # any time `code` was missing, whether or not the user
+                # actually cancelled anything. Yahoo puts a real reason in
+                # `error`/`error_description` when it redirects back
+                # without a code for its own reasons (misconfigured scope,
+                # app in a restricted review state, etc.).
+                yahoo_error = request.args.get("error")
+                yahoo_error_desc = request.args.get("error_description")
+                log.error(f"[yahoo-login] callback missing code — "
+                          f"error={yahoo_error!r} error_description={yahoo_error_desc!r} "
+                          f"full_args={dict(request.args)!r}")
+                if yahoo_error:
+                    return redirect(f"/?social_login_error=Yahoo:+{yahoo_error_desc or yahoo_error}")
                 return redirect("/?social_login_error=Yahoo+sign-in+was+cancelled")
 
             try:
