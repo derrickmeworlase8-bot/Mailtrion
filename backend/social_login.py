@@ -72,7 +72,15 @@ GOOGLE_LOGIN_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
 MICROSOFT_LOGIN_SCOPES = ["User.Read"]
-YAHOO_LOGIN_SCOPES = "openid email profile"
+YAHOO_LOGIN_SCOPES = "openid"
+# Yahoo's own docs and several independent bug reports (Firebase Auth,
+# Appwrite) confirm "openid" alone is what's required/supported for
+# issuing an ID token — requesting "profile"/"email" alongside it produces
+# exactly the "invalid_scope" error this app was hitting. The ID token
+# Yahoo issues for "openid" already includes email/name claims by default
+# (see _decode_id_token_claims below), so nothing is actually lost by
+# dropping the extra scope names — they were never doing anything useful
+# here and were the cause of the failure.
 
 # state -> expiry timestamp, just to bound how long a pending login attempt
 # is considered valid (CSRF protection for the OAuth redirect round-trip).
@@ -340,13 +348,34 @@ def register_social_login_routes(app, get_db, audit, TOKENS):
                     timeout=10,
                 )
                 token_resp.raise_for_status()
-                id_token = token_resp.json().get("id_token")
+                token_data = token_resp.json()
+                id_token = token_data.get("id_token")
+                access_token = token_data.get("access_token")
                 if not id_token:
                     return redirect("/?social_login_error=Yahoo+sign-in+failed")
 
                 claims = _decode_id_token_claims(id_token)
                 email = claims.get("email")
                 name = claims.get("given_name") or claims.get("name") or ""
+
+                # With scope=openid alone, the ID token's claims can vary
+                # by account type — fall back to Yahoo's userinfo endpoint
+                # (using the access_token from the same response) if email
+                # wasn't already present, rather than failing outright.
+                if not email and access_token:
+                    try:
+                        userinfo_resp = _requests.get(
+                            "https://api.login.yahoo.com/openid/v1/userinfo",
+                            headers={"Authorization": f"Bearer {access_token}"},
+                            timeout=10,
+                        )
+                        if userinfo_resp.ok:
+                            userinfo = userinfo_resp.json()
+                            email = userinfo.get("email") or email
+                            name = userinfo.get("given_name") or userinfo.get("name") or name
+                    except Exception as e:
+                        log.warning(f"[yahoo-login] userinfo fallback failed: {e!r}")
+
                 if not email:
                     return redirect("/?social_login_error=Could+not+get+your+email+from+Yahoo")
 
