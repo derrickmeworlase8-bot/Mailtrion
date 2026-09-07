@@ -184,6 +184,21 @@ def serve_frontend():
     return jsonify({"status": "Mailtrion backend running",
                     "note": "frontend/index.html not found"}), 200
 
+
+@app.route("/privacy", methods=["GET"])
+def privacy_policy():
+    path = os.path.join(BASE_DIR, "privacy.html")
+    if os.path.exists(path):
+        return send_file(path)
+    return jsonify({"error": "Privacy policy not found"}), 404
+
+@app.route("/terms", methods=["GET"])
+def terms_of_service():
+    path = os.path.join(BASE_DIR, "terms.html")
+    if os.path.exists(path):
+        return send_file(path)
+    return jsonify({"error": "Terms of service not found"}), 404
+
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
