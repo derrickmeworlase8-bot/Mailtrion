@@ -19,3 +19,6 @@ waitress==3.0.0
 # Outlook / Microsoft 365 integration (Phase B)
 msal==1.31.0
 requests==2.32.3
+
+# Postgres support (Supabase, for persistent production storage)
+psycopg2-binary>=2.9.9

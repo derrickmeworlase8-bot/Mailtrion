@@ -19,6 +19,7 @@ Author: Derek - BTech Cybersecurity Final Year Project
 
 import os, re, json, pickle, logging, hashlib, sqlite3, email, email.policy, secrets, uuid
 from datetime import datetime, timedelta
+from db_compat import connect as db_connect, table_columns, IntegrityError, IS_POSTGRES
 from urllib.parse import urlparse
 from functools import wraps
 
@@ -208,7 +209,7 @@ log = logging.getLogger(__name__)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect(DB_PATH)
     c = conn.cursor()
 
     # Users
@@ -345,7 +346,7 @@ def init_db():
     conn.commit()
 
     # ── Lightweight migration for existing DBs (adds columns if missing) ──────
-    existing_cols = {row[1] for row in c.execute("PRAGMA table_info(scans)").fetchall()}
+    existing_cols = table_columns(c, "scans")
     if "source" not in existing_cols:
         c.execute("ALTER TABLE scans ADD COLUMN source TEXT DEFAULT 'manual'")
         log.info("Migration: added scans.source")
@@ -374,7 +375,7 @@ def init_db():
     conn.commit()
 
     # ── Migration: email verification (OTP) columns on users ──────────────────
-    existing_user_cols = {row[1] for row in c.execute("PRAGMA table_info(users)").fetchall()}
+    existing_user_cols = table_columns(c, "users")
     if "is_verified" not in existing_user_cols:
         # Existing accounts (created before this feature existed) are grandfathered
         # in as already-verified, so nobody who could already log in gets locked out.
@@ -409,7 +410,7 @@ def init_db():
     conn.commit()
 
     # ── Migration: push-notification columns (Tier 3, optional) ────────────────
-    existing_gmail_cols = {row[1] for row in c.execute("PRAGMA table_info(gmail_accounts)").fetchall()}
+    existing_gmail_cols = table_columns(c, "gmail_accounts")
     if "history_id" not in existing_gmail_cols:
         c.execute("ALTER TABLE gmail_accounts ADD COLUMN history_id TEXT")
         log.info("Migration: added gmail_accounts.history_id")
@@ -417,7 +418,7 @@ def init_db():
         c.execute("ALTER TABLE gmail_accounts ADD COLUMN watch_expiration TEXT")
         log.info("Migration: added gmail_accounts.watch_expiration")
 
-    existing_outlook_cols = {row[1] for row in c.execute("PRAGMA table_info(outlook_accounts)").fetchall()}
+    existing_outlook_cols = table_columns(c, "outlook_accounts")
     if "subscription_id" not in existing_outlook_cols:
         c.execute("ALTER TABLE outlook_accounts ADD COLUMN subscription_id TEXT")
         log.info("Migration: added outlook_accounts.subscription_id")
@@ -510,9 +511,7 @@ def _migrate_credential_encryption(conn, c):
 
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return db_connect(DB_PATH)
 
 
 def audit(user_id, username, action, details=""):
@@ -1023,7 +1022,7 @@ def register():
                 "email": em,
                 "email_sent": False
             }), 201
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return jsonify({
             "error": "An account with this email or username already exists.",
             "account_exists": True
