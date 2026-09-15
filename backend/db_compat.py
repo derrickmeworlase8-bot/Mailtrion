@@ -80,7 +80,7 @@ class _PGConnWrapper:
         self._conn = real_conn
 
     def cursor(self):
-        return _PGCursorWrapper(self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor))
+        return _PGCursorWrapper(self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor))
 
     def execute(self, sql, params=()):
         return self.cursor().execute(sql, params)
