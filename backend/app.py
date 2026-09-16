@@ -265,6 +265,8 @@ def init_db():
             created_at  TEXT
         )""")
 
+    
+
     # Model metrics
     c.execute("""
         CREATE TABLE IF NOT EXISTS model_metrics (
@@ -275,6 +277,21 @@ def init_db():
             f1         REAL,
             auc        REAL,
             trained_at TEXT
+        )""")
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS retrain_runs (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            triggered_by  TEXT,
+            started_at    TEXT,
+            completed_at  TEXT,
+            samples_used  INTEGER,
+            accuracy      REAL,
+            precision     REAL,
+            recall        REAL,
+            f1            REAL,
+            auc           REAL,
+            applied       INTEGER DEFAULT 0,
+            reason        TEXT
         )""")
 
     # Gmail connected accounts (Phase 1 — automated ingestion)
@@ -372,7 +389,15 @@ def init_db():
     if "feedback_at" not in existing_cols:
         c.execute("ALTER TABLE scans ADD COLUMN feedback_at TEXT")
         log.info("Migration: added scans.feedback_at")
+        if "feedback_body_text" not in existing_cols:     
+            c.execute("ALTER TABLE scans ADD COLUMN feedback_body_text TEXT")
+        log.info("Migration: added scans.feedback_body_text")
+    if "feedback_incorporated" not in existing_cols:
+        c.execute("ALTER TABLE scans ADD COLUMN feedback_incorporated INTEGER DEFAULT 0")
+        log.info("Migration: added scans.feedback_incorporated")
     conn.commit()
+
+
 
     # ── Migration: email verification (OTP) columns on users ──────────────────
     existing_user_cols = table_columns(c, "users")
@@ -846,9 +871,42 @@ def load_training_data():
     log.info(f"Total training samples: {len(samples)}")
     return samples
 
+def load_feedback_samples(conn):
+    """
+    Returns (samples, row_ids): samples is a list of (text, label) pairs
+    built from analyst-corrected quarantine items, and row_ids is the
+    list of scans.id values used — so the caller can mark them
+    feedback_incorporated=1 once a retrain is actually applied.
+    Only scans where the original email body was successfully captured
+    at feedback time (see submit_feedback()) can be used here.
+    """
+    rows = conn.execute("""
+        SELECT id, sender, subject, feedback_body_text, analyst_feedback
+        FROM scans
+        WHERE analyst_feedback IS NOT NULL
+          AND feedback_body_text IS NOT NULL
+    """).fetchall()
 
-def build_model():
+    samples = []
+    row_ids = []
+    for r in rows:
+        try:
+            body = decrypt_value(r["feedback_body_text"])
+        except Exception:
+            continue
+        label = 0 if r["analyst_feedback"] == "false_positive" else 1
+        text = f"{r['subject'] or ''} {r['sender'] or ''} {body}"
+        samples.append((text, label))
+        row_ids.append(r["id"])
+    return samples, row_ids
+def train_candidate_model(extra_samples=None):
+    """Trains and returns (clf, vec, metrics) WITHOUT touching disk or the
+    database — pure evaluation. extra_samples lets analyst-corrected
+    feedback be blended in alongside the base training set."""
     samples = load_training_data()
+    if extra_samples:
+        samples = samples + extra_samples
+
     texts  = [preprocess_text(s[0]) for s in samples]
     labels = [s[1] for s in samples]
 
@@ -874,9 +932,16 @@ def build_model():
         "f1":        round(float(f1_score(y_te,y_pred,zero_division=0)),4),
         "auc":       round(float(roc_auc_score(y_te,y_proba)),4) if len(set(y_te))>1 else 0.0,
     }
-    log.info(f"Model: acc={metrics['accuracy']} f1={metrics['f1']} auc={metrics['auc']}")
-    log.info(f"\n{classification_report(y_te,y_pred,target_names=['Safe','Phishing'])}")
+    log.info(f"[retrain] candidate: acc={metrics['accuracy']} f1={metrics['f1']} auc={metrics['auc']} "
+             f"(trained on {len(samples)} samples, {len(extra_samples or [])} from feedback)")
+    return clf, vec, metrics
 
+
+def apply_model(clf, vec, metrics):
+    """Commits a trained candidate as the live model: writes model.pkl/
+    vec.pkl to disk, records the metrics, and updates the in-memory
+    globals used by every live scan."""
+    global MODEL, VECTORIZER
     with open(os.path.join(MODEL_DIR,"model.pkl"),"wb") as f: pickle.dump(clf,f)
     with open(os.path.join(MODEL_DIR,"vec.pkl"),"wb")   as f: pickle.dump(vec,f)
 
@@ -885,9 +950,80 @@ def build_model():
         (metrics["accuracy"],metrics["precision"],metrics["recall"],
          metrics["f1"],metrics["auc"],datetime.utcnow().isoformat()))
     conn.commit(); conn.close()
+
+    MODEL, VECTORIZER = clf, vec
+    log.info(f"[retrain] applied — now live: f1={metrics['f1']}")
+
+
+def build_model():
+    """Kept so load_model()'s cold-start path (first boot, no model.pkl
+    on disk yet) still works exactly as before: train on the base
+    dataset only, and apply immediately."""
+    clf, vec, metrics = train_candidate_model()
+    apply_model(clf, vec, metrics)
     return clf, vec, metrics
 
+def run_automated_retrain(triggered_by="scheduled", force=False):
+    """
+    Builds a candidate model from analyst-corrected feedback (plus the
+    base training set), and only replaces the live model if the
+    candidate's F1 score is at least as good as the currently deployed
+    model's. A handful of mistaken analyst corrections should never be
+    able to silently degrade production accuracy unattended. Every
+    attempt — applied or rejected — is logged to retrain_runs.
+    """
+    conn = get_db()
+    feedback_samples, row_ids = load_feedback_samples(conn)
 
+    unprocessed_row = conn.execute("""
+        SELECT COUNT(*) as n FROM scans
+        WHERE analyst_feedback IS NOT NULL
+          AND feedback_body_text IS NOT NULL
+          AND feedback_incorporated = 0
+    """).fetchone()
+    unprocessed = unprocessed_row["n"]
+
+    if not force and unprocessed == 0:
+        conn.close()
+        log.info("[retrain] skipped — no new analyst feedback since last run")
+        return {"skipped": True, "reason": "no new feedback"}
+
+    started_at = datetime.utcnow().isoformat()
+    candidate_clf, candidate_vec, candidate_metrics = train_candidate_model(extra_samples=feedback_samples)
+
+    current = conn.execute(
+        "SELECT * FROM model_metrics ORDER BY trained_at DESC LIMIT 1"
+    ).fetchone()
+    current_f1 = current["f1"] if current else -1
+
+    applied = candidate_metrics["f1"] >= current_f1
+    reason = (
+        f"applied: candidate F1 {candidate_metrics['f1']} >= current F1 {current_f1}"
+        if applied else
+        f"rejected: candidate F1 {candidate_metrics['f1']} < current F1 {current_f1}"
+    )
+
+    if applied:
+        apply_model(candidate_clf, candidate_vec, candidate_metrics)
+        if row_ids:
+            placeholders = ",".join(["?"] * len(row_ids))
+            conn.execute(
+                f"UPDATE scans SET feedback_incorporated=1 WHERE id IN ({placeholders})",
+                row_ids
+            )
+            conn.commit()
+
+    conn.execute("""INSERT INTO retrain_runs
+        (triggered_by, started_at, completed_at, samples_used, accuracy, precision, recall, f1, auc, applied, reason)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (triggered_by, started_at, datetime.utcnow().isoformat(), len(feedback_samples),
+         candidate_metrics["accuracy"], candidate_metrics["precision"], candidate_metrics["recall"],
+         candidate_metrics["f1"], candidate_metrics["auc"], 1 if applied else 0, reason))
+    conn.commit()
+    conn.close()
+
+    log.info(f"[retrain] {reason}")
+    return {"skipped": False, "applied": applied, "metrics": candidate_metrics, "reason": reason}
 def load_model():
     mp = os.path.join(MODEL_DIR,"model.pkl")
     vp = os.path.join(MODEL_DIR,"vec.pkl")
@@ -1488,12 +1624,24 @@ def model_info():
 
 @app.route("/retrain", methods=["POST"])
 @admin_required
+@app.route("/retrain", methods=["POST"])
+@admin_required
 def retrain():
-    global MODEL, VECTORIZER
-    MODEL, VECTORIZER, metrics = build_model()
+    result = run_automated_retrain(triggered_by="manual", force=True)
     audit(current_user()["id"], current_user()["username"],
-          "MODEL_RETRAIN", f"acc={metrics['accuracy']}")
-    return jsonify({"status":"retrained","metrics":metrics})
+          "MODEL_RETRAIN", result.get("reason", "manual retrain"))
+    return jsonify(result)
+
+
+@app.route("/retrain-history", methods=["GET"])
+@admin_required
+def retrain_history():
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM retrain_runs ORDER BY started_at DESC LIMIT 50"
+    ).fetchall()
+    conn.close()
+    return jsonify({"runs": [dict(r) for r in rows]})
 
 # ══════════════════════════════════════════════════════════════════════════════
 # QUARANTINE MANAGEMENT
@@ -1587,13 +1735,33 @@ def submit_feedback(scan_id):
         conn.close()
         return jsonify({"error": "You can only give feedback on your own scans"}), 403
 
+        captured_body_note = "no connected account (manual scan) — not eligible for retraining"
+    encrypted_body = None
+    if row["provider"] and row["account_id"] and row["gmail_message_id"]:
+        try:
+            from providers import REGISTRY
+            table_name, provider_class = REGISTRY[row["provider"]]
+            account_row = conn.execute(
+                f"SELECT * FROM {table_name} WHERE id=?", (row["account_id"],)).fetchone()
+            if account_row:
+                provider = provider_class(account_row, get_db)
+                provider.ensure_fresh_credentials()
+                msg = provider.fetch_normalized_message(row["gmail_message_id"])
+                encrypted_body = encrypt_value(msg["body"])
+                captured_body_note = "original message captured for retraining"
+            else:
+                captured_body_note = "connected account no longer exists — could not refetch message"
+        except Exception as e:
+            captured_body_note = f"could not refetch original message ({e}) — not eligible for retraining"
+            log.warning(f"[feedback] body capture failed for scan {scan_id}: {e}")
+
     conn.execute(
-        "UPDATE scans SET analyst_feedback=?, feedback_by=?, feedback_at=? WHERE scan_id=?",
-        (verdict, user["username"], datetime.utcnow().isoformat(), scan_id))
+        "UPDATE scans SET analyst_feedback=?, feedback_by=?, feedback_at=?, feedback_body_text=? WHERE scan_id=?",
+        (verdict, user["username"], datetime.utcnow().isoformat(), encrypted_body, scan_id))
     conn.commit(); conn.close()
     audit(user["id"], user["username"], "SCAN_FEEDBACK",
-          f"scan_id={scan_id} verdict={verdict}")
-    return jsonify({"message": "Feedback recorded"})
+          f"scan_id={scan_id} verdict={verdict} retrain_note={captured_body_note}")
+    return jsonify({"message": "Feedback recorded", "retrain_note": captured_body_note})
 
 
 @app.route("/quarantine/<scan_id>/delete", methods=["DELETE"])
@@ -1998,6 +2166,10 @@ if __name__ == "__main__":
         POLL_INTERVAL_SECONDS = int(os.environ.get("MAIL_POLL_INTERVAL", "90"))
         scheduler = BackgroundScheduler()
         scheduler.add_job(_poll_tick, "interval", seconds=POLL_INTERVAL_SECONDS, id="mail_poll")
+        scheduler.add_job(
+            lambda: run_automated_retrain(triggered_by="scheduled"),
+            "cron", hour=3, id="nightly_retrain"
+        )
         scheduler.start()
         log.info(f"Mail polling active every {POLL_INTERVAL_SECONDS}s")
 
