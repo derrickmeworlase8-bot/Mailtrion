@@ -1622,8 +1622,7 @@ def model_info():
     return jsonify(dict(row) if row else {"message":"No metrics yet"})
 
 
-@app.route("/retrain", methods=["POST"])
-@admin_required
+
 @app.route("/retrain", methods=["POST"])
 @admin_required
 def retrain():
