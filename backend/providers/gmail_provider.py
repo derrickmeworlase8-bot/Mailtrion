@@ -73,14 +73,26 @@ class GmailProvider(EmailProvider):
         self._quarantine_label_id = None
 
     def _credentials(self):
-        return Credentials(
-            token=decrypt_value(self.account["access_token"]),
-            refresh_token=decrypt_value(self.account["refresh_token"]),
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=_client_id(),
-            client_secret=_client_secret(),
-            scopes=SCOPES,
+        if self.account.get("is_delegated"):
+         from workspace_delegation import build_delegated_credentials, GMAIL_SCOPES
+        conn = self.get_db()
+        domain_row = conn.execute(
+            "SELECT service_account_json FROM workspace_domains WHERE id=?",
+            (self.account["workspace_domain_id"],)
+        ).fetchone()
+        conn.close()
+        service_account_json = decrypt_value(domain_row["service_account_json"])
+        return build_delegated_credentials(
+            service_account_json, self.account["gmail_address"], GMAIL_SCOPES
         )
+        return Credentials(
+        token=decrypt_value(self.account["access_token"]),
+        refresh_token=decrypt_value(self.account["refresh_token"]),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=_client_id(),
+        client_secret=_client_secret(),
+        scopes=SCOPES,
+    )
 
     def ensure_fresh_credentials(self):
         creds = self._credentials()

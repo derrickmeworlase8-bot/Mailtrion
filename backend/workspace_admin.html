@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mailtrion — Workspace Enrollment</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; max-width: 820px; margin: 0 auto; padding: 32px 20px 80px; color: #1a1a1a; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .sub { color: #666; margin-bottom: 28px; }
+  fieldset { border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 28px; }
+  legend { font-weight: 600; padding: 0 8px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+  input[type=text], input[type=email], textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; font-size: 14px; box-sizing: border-box; }
+  textarea { min-height: 90px; font-family: monospace; font-size: 12px; }
+  button { background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; margin-top: 14px; }
+  button:hover { background: #1d4ed8; }
+  button.secondary { background: #16a34a; }
+  button.secondary:hover { background: #15803d; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; }
+  #status { margin-top: 14px; padding: 10px; border-radius: 6px; font-size: 13px; white-space: pre-wrap; }
+  .ok { background: #dcfce7; color: #166534; }
+  .err { background: #fee2e2; color: #991b1b; }
+</style>
+</head>
+<body>
+
+<h1>Google Workspace Enrollment</h1>
+<p class="sub">Admin-only. Connect an institution's domain, then bulk-enroll every mailbox in it.</p>
+
+<fieldset>
+  <legend>Your Mailtrion admin token</legend>
+  <label>Bearer token</label>
+  <input type="text" id="token" placeholder="Paste your Mailtrion login token here">
+  <button onclick="saveToken()">Use this token</button>
+</fieldset>
+
+<fieldset>
+  <legend>1. Connect a domain</legend>
+  <label>Organization name</label>
+  <input type="text" id="organization" placeholder="e.g. Accra Technical University">
+  <label>Domain</label>
+  <input type="text" id="domain" placeholder="e.g. mailtriontest.xyz">
+  <label>Admin subject email (a real admin in that domain)</label>
+  <input type="email" id="admin_subject_email" placeholder="e.g. admin@mailtriontest.xyz">
+  <label>Service account JSON (paste the full downloaded key file contents)</label>
+  <textarea id="service_account_json" placeholder='{"type": "service_account", ...}'></textarea>
+  <button onclick="connectDomain()">Save domain</button>
+</fieldset>
+
+<fieldset>
+  <legend>2. Connected domains</legend>
+  <button onclick="loadDomains()">Refresh list</button>
+  <table id="domainsTable">
+    <thead><tr><th>Domain</th><th>Organization</th><th>Enrolled so far</th><th>Last enrolled</th><th></th></tr></thead>
+    <tbody id="domainsBody"></tbody>
+  </table>
+</fieldset>
+
+<div id="status"></div>
+
+<script>
+function getToken() { return localStorage.getItem('mailtrion_admin_token') || ''; }
+function saveToken() {
+  const t = document.getElementById('token').value.trim();
+  localStorage.setItem('mailtrion_admin_token', t);
+  showStatus('Token saved for this browser.', true);
+}
+document.getElementById('token').value = getToken();
+
+function showStatus(msg, ok) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = ok ? 'ok' : 'err';
+}
+
+async function connectDomain() {
+  const body = {
+    organization: document.getElementById('organization').value.trim(),
+    domain: document.getElementById('domain').value.trim(),
+    admin_subject_email: document.getElementById('admin_subject_email').value.trim(),
+    service_account_json: document.getElementById('service_account_json').value.trim(),
+  };
+  try {
+    const res = await fetch('/admin/workspace/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unknown error');
+    showStatus('Saved: ' + data.message, true);
+    loadDomains();
+  } catch (e) {
+    showStatus('Error: ' + e.message, false);
+  }
+}
+
+async function loadDomains() {
+  try {
+    const res = await fetch('/admin/workspace', {
+      headers: { 'Authorization': 'Bearer ' + getToken() }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unknown error');
+    const tbody = document.getElementById('domainsBody');
+    tbody.innerHTML = '';
+    for (const d of data.domains) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${d.domain}</td>
+        <td>${d.organization}</td>
+        <td>${d.enrolled_user_count}</td>
+        <td>${d.last_enrolled_at || 'never'}</td>
+        <td><button class="secondary" onclick="enrollDomain(${d.id})">Enroll now</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+  } catch (e) {
+    showStatus('Error loading domains: ' + e.message, false);
+  }
+}
+
+async function enrollDomain(id) {
+  try {
+    const res = await fetch(`/admin/workspace/${id}/enroll`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + getToken() }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unknown error');
+    showStatus(data.message, true);
+    loadDomains();
+  } catch (e) {
+    showStatus('Enrollment failed: ' + e.message, false);
+  }
+}
+
+loadDomains();
+</script>
+
+</body>
+</html>

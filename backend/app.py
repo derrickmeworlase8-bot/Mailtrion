@@ -200,6 +200,13 @@ def terms_of_service():
         return send_file(path)
     return jsonify({"error": "Terms of service not found"}), 404
 
+@app.route("/admin/workspace-ui", methods=["GET"])
+def workspace_admin_ui():
+    path = os.path.join(BASE_DIR, "workspace_admin.html")
+    if os.path.exists(path):
+        return send_file(path)
+    return jsonify({"error": "Admin UI not found"}), 404
+
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -359,7 +366,19 @@ def init_db():
             last_seen       TEXT,
             UNIQUE(organization, sender_domain)
         )""")
-
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS workspace_domains (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization          TEXT NOT NULL,
+        domain                TEXT UNIQUE NOT NULL,
+        service_account_json  TEXT NOT NULL,
+        admin_subject_email   TEXT NOT NULL,
+        connected_by          INTEGER,
+        connected_at          TEXT,
+        last_enrolled_at      TEXT,
+        enrolled_user_count   INTEGER DEFAULT 0,
+        is_active             INTEGER DEFAULT 1
+    )""")
     conn.commit()
 
     # ── Lightweight migration for existing DBs (adds columns if missing) ──────
@@ -443,6 +462,12 @@ def init_db():
         c.execute("ALTER TABLE gmail_accounts ADD COLUMN watch_expiration TEXT")
         log.info("Migration: added gmail_accounts.watch_expiration")
 
+    if "is_delegated" not in existing_gmail_cols:
+    c.execute("ALTER TABLE gmail_accounts ADD COLUMN is_delegated INTEGER DEFAULT 0")
+    log.info("Migration: added gmail_accounts.is_delegated")
+    if "workspace_domain_id" not in existing_gmail_cols:
+       c.execute("ALTER TABLE gmail_accounts ADD COLUMN workspace_domain_id INTEGER")
+    log.info("Migration: added gmail_accounts.workspace_domain_id")
     existing_outlook_cols = table_columns(c, "outlook_accounts")
     if "subscription_id" not in existing_outlook_cols:
         c.execute("ALTER TABLE outlook_accounts ADD COLUMN subscription_id TEXT")
@@ -2057,6 +2082,12 @@ if __name__ == "__main__":
     init_db()
     MODEL, VECTORIZER = load_model()
 
+    try:
+        from workspace_routes import register_workspace_routes
+        register_workspace_routes(app, get_db, audit, admin_required, current_user)
+        log.info("Google Workspace domain-wide enrollment enabled")
+    except ImportError as e:
+        log.warning(f"Workspace delegation dependencies missing ({e}).")
     # ── Multi-provider email integration (OAuth routes) ────────────────────
     # Each provider's OAuth connect/callback/status/disconnect routes are
     # registered only if that provider's credentials file is present.
