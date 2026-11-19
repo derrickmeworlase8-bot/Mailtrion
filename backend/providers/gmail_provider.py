@@ -73,26 +73,37 @@ class GmailProvider(EmailProvider):
         self._quarantine_label_id = None
 
     def _credentials(self):
+        # Workspace domain-wide delegation: only for accounts enrolled via
+        # the Workspace admin flow. Everything below this block must stay
+        # INSIDE the `if` — a normal OAuth-connected account has no
+        # workspace_domain_id, so running the lookup for it returns no row.
         if self.account.get("is_delegated"):
-         from workspace_delegation import build_delegated_credentials, GMAIL_SCOPES
-        conn = self.get_db()
-        domain_row = conn.execute(
-            "SELECT service_account_json FROM workspace_domains WHERE id=?",
-            (self.account["workspace_domain_id"],)
-        ).fetchone()
-        conn.close()
-        service_account_json = decrypt_value(domain_row["service_account_json"])
-        return build_delegated_credentials(
-            service_account_json, self.account["gmail_address"], GMAIL_SCOPES
-        )
+            from workspace_delegation import build_delegated_credentials, GMAIL_SCOPES
+            conn = self.get_db()
+            domain_row = conn.execute(
+                "SELECT service_account_json FROM workspace_domains WHERE id=?",
+                (self.account["workspace_domain_id"],)
+            ).fetchone()
+            conn.close()
+            if not domain_row:
+                raise RuntimeError(
+                    f"Workspace domain {self.account['workspace_domain_id']} not found "
+                    f"for delegated account {self.account['gmail_address']}"
+                )
+            service_account_json = decrypt_value(domain_row["service_account_json"])
+            return build_delegated_credentials(
+                service_account_json, self.account["gmail_address"], GMAIL_SCOPES
+            )
+
+        # Normal OAuth-connected account (the default path).
         return Credentials(
-        token=decrypt_value(self.account["access_token"]),
-        refresh_token=decrypt_value(self.account["refresh_token"]),
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=_client_id(),
-        client_secret=_client_secret(),
-        scopes=SCOPES,
-    )
+            token=decrypt_value(self.account["access_token"]),
+            refresh_token=decrypt_value(self.account["refresh_token"]),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=_client_id(),
+            client_secret=_client_secret(),
+            scopes=SCOPES,
+        )
 
     def ensure_fresh_credentials(self):
         creds = self._credentials()
