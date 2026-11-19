@@ -30,6 +30,12 @@ from paths import (
 )
 BASE_DIR = APP_DIR  # kept as an alias — some existing code below still refers to BASE_DIR
 
+# Logging is configured up here (before anything that logs) so helpers that
+# run at import time, like _ensure_nltk_data below, can safely use `log`.
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s [%(levelname)s] %(message)s")
+log = logging.getLogger(__name__)
+
 import nltk
 nltk.data.path.insert(0, NLTK_DATA_DIR)  # check the bundled copy before anything else
 import numpy as np
@@ -207,10 +213,6 @@ def workspace_admin_ui():
         return send_file(path)
     return jsonify({"error": "Admin UI not found"}), 404
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger(__name__)
-
 # ══════════════════════════════════════════════════════════════════════════════
 # DATABASE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -271,8 +273,6 @@ def init_db():
             ip_address  TEXT,
             created_at  TEXT
         )""")
-
-    
 
     # Model metrics
     c.execute("""
@@ -408,15 +408,13 @@ def init_db():
     if "feedback_at" not in existing_cols:
         c.execute("ALTER TABLE scans ADD COLUMN feedback_at TEXT")
         log.info("Migration: added scans.feedback_at")
-        if "feedback_body_text" not in existing_cols:     
-            c.execute("ALTER TABLE scans ADD COLUMN feedback_body_text TEXT")
+    if "feedback_body_text" not in existing_cols:
+        c.execute("ALTER TABLE scans ADD COLUMN feedback_body_text TEXT")
         log.info("Migration: added scans.feedback_body_text")
     if "feedback_incorporated" not in existing_cols:
         c.execute("ALTER TABLE scans ADD COLUMN feedback_incorporated INTEGER DEFAULT 0")
         log.info("Migration: added scans.feedback_incorporated")
     conn.commit()
-
-
 
     # ── Migration: email verification (OTP) columns on users ──────────────────
     existing_user_cols = table_columns(c, "users")
@@ -461,13 +459,13 @@ def init_db():
     if "watch_expiration" not in existing_gmail_cols:
         c.execute("ALTER TABLE gmail_accounts ADD COLUMN watch_expiration TEXT")
         log.info("Migration: added gmail_accounts.watch_expiration")
-
     if "is_delegated" not in existing_gmail_cols:
-    c.execute("ALTER TABLE gmail_accounts ADD COLUMN is_delegated INTEGER DEFAULT 0")
-    log.info("Migration: added gmail_accounts.is_delegated")
+        c.execute("ALTER TABLE gmail_accounts ADD COLUMN is_delegated INTEGER DEFAULT 0")
+        log.info("Migration: added gmail_accounts.is_delegated")
     if "workspace_domain_id" not in existing_gmail_cols:
-       c.execute("ALTER TABLE gmail_accounts ADD COLUMN workspace_domain_id INTEGER")
-    log.info("Migration: added gmail_accounts.workspace_domain_id")
+        c.execute("ALTER TABLE gmail_accounts ADD COLUMN workspace_domain_id INTEGER")
+        log.info("Migration: added gmail_accounts.workspace_domain_id")
+
     existing_outlook_cols = table_columns(c, "outlook_accounts")
     if "subscription_id" not in existing_outlook_cols:
         c.execute("ALTER TABLE outlook_accounts ADD COLUMN subscription_id TEXT")
@@ -1613,11 +1611,32 @@ def analyze_email():
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({
-        "status": "ok",
+    """
+    Public health check, used by an uptime monitor (e.g. UptimeRobot) to:
+      1. keep the Render free instance awake, and
+      2. generate real database activity so the Supabase free project
+         doesn't get auto-paused after ~7 days of inactivity.
+    Runs a trivial SELECT 1 against the database. Returns 200 when healthy,
+    500 when the database can't be reached (so the monitor reports "down").
+    The raw error is logged server-side only — never returned, because
+    database errors can include host and username details.
+    """
+    db_ok = False
+    try:
+        conn = get_db()
+        conn.execute("SELECT 1").fetchone()
+        conn.close()
+        db_ok = True
+    except Exception as e:
+        log.error(f"/health database check failed: {e}")
+
+    body = {
+        "status": "ok" if db_ok else "db_error",
+        "database": "ok" if db_ok else "unreachable",
         "model_loaded": MODEL is not None,
         "timestamp": datetime.utcnow().isoformat()
-    })
+    }
+    return jsonify(body), (200 if db_ok else 500)
 
 
 @app.route("/stats", methods=["GET"])
@@ -1759,7 +1778,7 @@ def submit_feedback(scan_id):
         conn.close()
         return jsonify({"error": "You can only give feedback on your own scans"}), 403
 
-        captured_body_note = "no connected account (manual scan) — not eligible for retraining"
+    captured_body_note = "no connected account (manual scan) — not eligible for retraining"
     encrypted_body = None
     if row["provider"] and row["account_id"] and row["gmail_message_id"]:
         try:
